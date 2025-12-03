@@ -32,9 +32,9 @@ ticker = st.text_input("Enter a ticker (e.g. SPY, AAPL, MSFT)")
 if ticker:
     try:
         S0_default = float(get_close_price(ticker).iloc[-1])
-        st.success(f"Spot actuel : {S0_default}")
+        st.success(f"Current Spot: {S0_default}")
     except:
-        st.error("Ticker invalide")
+        st.error("Invalid ticker")
         S0_default = 100.0
 else:
     S0_default = 100.0
@@ -47,11 +47,11 @@ col1, col2 = st.columns(2)
 
 with col1:
     opt_type = st.radio("Option type", ["Call", "Put"])
-    K = st.number_input("Strike K", value=100.0)
-    T = st.number_input("Maturity T (years)", value=1.0)
+    K = st.number_input("Strike K")
+    T = st.number_input("Maturity T (years)")
 
 with col2:
-    S0 = st.number_input("Spot S0", value=S0_default)
+    S0 = st.number_input("Spot (By default equal to the current spot of the ticker)", value=S0_default)
     r = st.number_input("Risk-free rate r", value=0.04)
     sigma = st.number_input("Volatility sigma", value=0.20)
 
@@ -77,4 +77,4 @@ if st.button("Calculate price"):
     engine = PricingEngine(model=model)
     price = engine.price_european(opt, kind=opt_type.lower())
 
-    st.success(f"Prix de l'option : {price:.4f}")
+    st.success(f"Option price : ) : {price:.4f}")
