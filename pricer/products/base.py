@@ -9,5 +9,5 @@ class Option(ABC):
         self.T = maturity
 
     @abstractmethod
-    def payoff(self, ST: float) -> float:
+    def payoff(self, ST: float) :
         pass

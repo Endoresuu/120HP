@@ -10,9 +10,7 @@ if ROOT_DIR not in sys.path:
 
 class HestonModel:
     """
-    Modèle de Heston avec simulation de trajectoires par schéma d'Euler
-    et pricing Monte Carlo d'une option européenne.
-    On suppose que l'objet MarketData contient tous les paramètres nécessaires.
+    Modèle de Heston + simulation Euler + pricing Monte Carlo.
     """
 
     def __init__(self, T, K, n_steps=252, n_paths=50000, v0=0.04, kappa=2, theta=0.04, sigma_v=0.5, rho=-0.7):
@@ -63,15 +61,17 @@ class HestonModel:
             dW1 = sqrt_dt * z1
             dW2 = sqrt_dt * (self.rho * z1 + sqrt_1_minus_rho2 * z2)
 
-            v_t = np.maximum(v[:, t], 0.0)
+            v_t = np.maximum(v[:, t], 0)
 
+            # CIR variance process
             v_next = (
                 v_t
                 + self.kappa * (self.theta - v_t) * dt
                 + self.sigma_v * np.sqrt(v_t) * dW2
             )
-            v[:, t + 1] = np.maximum(v_next, 0.0)
+            v[:, t + 1] = np.maximum(v_next, 0)
 
+            # Asset dynamics
             S[:, t + 1] = S[:, t] * np.exp(
                 (market.r - 0.5 * v_t) * dt + np.sqrt(v_t) * dW1
             )
