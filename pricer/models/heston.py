@@ -1,7 +1,12 @@
 import numpy as np
+import os
+import sys
 from pricer.market.data import MarketData
 from pricer.products.base import Option
 
+ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 class HestonModel:
     """
@@ -10,9 +15,17 @@ class HestonModel:
     On suppose que l'objet MarketData contient tous les paramètres nécessaires.
     """
 
-    def __init__(self):
-        # Pas besoin d'hériter de Model pour l'instant
-        pass
+    def __init__(self, T, K, n_steps=252, n_paths=50000, v0=0.04, kappa=2, theta=0.04, sigma_v=0.5, rho=-0.7):
+
+        self.T = T
+        self.K = K
+        self. n_steps = n_steps
+        self.n_paths = n_paths
+        self.v0 = v0
+        self.kappa = kappa
+        self.theta = theta
+        self.sigma_v = sigma_v
+        self.rho = rho
 
     def simulate_paths(self, market: MarketData):
         """
@@ -31,34 +44,31 @@ class HestonModel:
         - market.rho      : corrélation entre dW1 et dW2
         """
 
-        T = market.T
-        n_steps = market.n_steps
-        n_paths = market.n_paths
 
-        dt = T / n_steps
+        dt = self.T / self.n_steps
 
-        S = np.zeros((n_paths, n_steps + 1))
-        v = np.zeros((n_paths, n_steps + 1))
+        S = np.zeros((self.n_paths, self.n_steps + 1))
+        v = np.zeros((self.n_paths, self.n_steps + 1))
 
         S[:, 0] = market.S_0
-        v[:, 0] = market.v_0
+        v[:, 0] = self.v0
 
         sqrt_dt = np.sqrt(dt)
-        sqrt_1_minus_rho2 = np.sqrt(1.0 - market.rho**2)
+        sqrt_1_minus_rho2 = np.sqrt(1.0 - self.rho**2)
 
-        for t in range(n_steps):
-            z1 = np.random.normal(size=n_paths)
-            z2 = np.random.normal(size=n_paths)
+        for t in range(self.n_steps):
+            z1 = np.random.normal(size=self.n_paths)
+            z2 = np.random.normal(size=self.n_paths)
 
             dW1 = sqrt_dt * z1
-            dW2 = sqrt_dt * (market.rho * z1 + sqrt_1_minus_rho2 * z2)
+            dW2 = sqrt_dt * (self.rho * z1 + sqrt_1_minus_rho2 * z2)
 
             v_t = np.maximum(v[:, t], 0.0)
 
             v_next = (
                 v_t
-                + market.kappa * (market.theta - v_t) * dt
-                + market.sigma_v * np.sqrt(v_t) * dW2
+                + self.kappa * (self.theta - v_t) * dt
+                + self.sigma_v * np.sqrt(v_t) * dW2
             )
             v[:, t + 1] = np.maximum(v_next, 0.0)
 
@@ -68,16 +78,36 @@ class HestonModel:
 
         return S, v
 
-    def price_european(self, option: Option, market: MarketData) -> float:
-        """
-        Prix Monte Carlo d'une option européenne (call/put)
-        dont le payoff est donné par option.payoff(ST).
-        """
-        S, _ = self.simulate_paths(market)
+    def heston_european_call_mc(self, market: MarketData):
+
+        S, v = self.simulate_paths(market)
+
+        ST = S[:, -1]
+        payoff = np.maximum(ST - self.K, 0.0)
+        price = np.exp(-market.r * self.T) * payoff.mean()
+
+        return price
+
+    def heston_european_put_mc(self, mearket: MarketData):
+
+        S, v = self.simulate_paths(market)
+
         ST = S[:, -1]
 
-        payoffs = np.array([option.payoff(s) for s in ST])
-        discount_factor = np.exp(-market.r * option.T)
 
-        price = discount_factor * payoffs.mean()
-        return float(price)
+        payoff = np.maximum(self.K - ST, 0.0)
+
+        price = np.exp(-market.r * self.T) * payoff.mean()
+
+
+        return price
+
+
+
+market = MarketData(500)
+
+heston = HestonModel(1, 100)
+
+print(heston.heston_european_call_mc(market))
+
+print(heston.heston_european_put_mc(market))
