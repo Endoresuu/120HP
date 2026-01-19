@@ -41,8 +41,6 @@ st.markdown("<h1 style='text-align:center;'>Option Pricer 💰</h1>", unsafe_all
 #  HELPER
 # -------------------------
 
-from datetime import datetime
-
 def choose_next_expiry(chains):
     """Retourne (expiry_str, days, T) pour la prochaine échéance future."""
     if not chains:
@@ -93,6 +91,39 @@ def choose_expiry_closest_to_T(chains, T_target):
         return None, None, None
 
     return best_expiry, best_days, best_days / 365.0
+
+
+def get_market_call_price_from_chain(chains, expiry, K):
+    """
+    Récupère un prix de CALL depuis une option chain Yahoo Finance
+    en prenant le strike le plus proche de K.
+    """
+    if chains is None or expiry not in chains:
+        return None, None
+
+    df = chains[expiry].copy()
+
+    if "strike" not in df.columns:
+        return None, None
+
+    # strike le plus proche
+    df = df.sort_values("strike")
+    idx = (df["strike"] - K).abs().idxmin()
+    row = df.loc[idx]
+
+    price = None
+
+    # priorité : lastPrice
+    if "lastPrice" in row and row["lastPrice"] is not None and row["lastPrice"] > 0:
+        price = float(row["lastPrice"])
+
+    # fallback : mid bid/ask
+    elif "bid" in row and "ask" in row:
+        bid, ask = row["bid"], row["ask"]
+        if bid is not None and ask is not None and ask >= bid:
+            price = float(0.5 * (bid + ask))
+
+    return price, float(row["strike"])
 
 # -------------------------
 #   TABS
@@ -232,7 +263,8 @@ with tab_price:
             errors.append("Strike K must be > 0.")
         if S0 <= 0:
             errors.append("Spot S₀ must be > 0.")
-        if vol_mode == "Implied volatility (Newton)" and market_price <= 0:
+        if vol_mode == "Implied volatility (Newton)" and (
+            market_price is None or market_price <= 0):
             errors.append("Market price must be > 0.")
 
         if errors:
