@@ -425,159 +425,187 @@ with tab_surface:
     if st.button("Compute Volatility Surface", key="surf_btn"):
 
         try:
-            # =========================
-            # 1) Market data
-            # =========================
-            chains = get_option_chain(ticker_sf)
-            S0 = float(get_close_price(ticker_sf).iloc[-1])
-            r = 0.04  # si tu veux tu peux en faire un input
+            with st.status("Fetching data and computing surface...", expanded=True) as status:
+                # =========================
+                # 1) Market data
+                # =========================
+                st.write("Fetching market data...")
+                chains = get_option_chain(ticker_sf)
+                S0 = float(get_close_price(ticker_sf).iloc[-1])
+                r = 0.04  # si tu veux tu peux en faire un input
 
-            expiries = sorted(chains.keys())[:n_mat]
+                expiries = sorted(chains.keys())[:n_mat]
 
-            maturities = []
-            for e in expiries:
-                T = (datetime.strptime(e, "%Y-%m-%d") - datetime.today()).days / 365.0
-                maturities.append(T)
+                maturities = []
+                for e in expiries:
+                    T = (datetime.strptime(e, "%Y-%m-%d") - datetime.today()).days / 365.0
+                    maturities.append(T)
 
-            # =========================
-            # 2) Strikes & price matrix
-            # =========================
-            all_strikes = sorted(
-                set().union(*[set(chains[e]["strike"]) for e in expiries])
-            )
-            strikes = np.array(all_strikes, dtype=float)
-
-            price_matrix = np.zeros((len(maturities), len(strikes))) * np.nan
-
-            for i, e in enumerate(expiries):
-                df = chains[e].copy()
-                df = df.set_index("strike")
-
-                for j, K in enumerate(strikes):
-                    if K in df.index:
-                        price_matrix[i, j] = float(df.loc[K]["lastPrice"])
-
-            # On enlève les colonnes entièrement NaN
-            valid_cols = ~np.isnan(price_matrix).all(axis=0)
-            strikes = strikes[valid_cols]
-            price_matrix = price_matrix[:, valid_cols]
-
-            # =========================
-            # 3) Calibrateur BS -> surface de vol
-            # =========================
-            cal = Calibrator(
-                strikes=strikes,
-                maturities=maturities,
-                S0=S0,
-                r=r,
-                price_matrix=price_matrix
-            )
-
-            vol_surface = cal.build_surface()  # objet VolatilitySurface
-
-            # surface brute
-            raw_matrix = vol_surface.surface  # shape (len(maturities), len(strikes))
-
-            df_raw = pd.DataFrame(
-                raw_matrix,
-                index=maturities,
-                columns=strikes
-            )
-
-            st.subheader("Raw implied volatility surface")
-            st.dataframe(df_raw)
-
-            # =========================
-            # 4) Interpolation (simple bilinéaire)
-            # =========================
-            if interp_method == "Bilinear (2D interpolation)":
-                df_interp = (
-                    df_raw
-                    .interpolate(axis=1, limit_direction="both")
-                    .interpolate(axis=0, limit_direction="both")
+                # =========================
+                # 2) Strikes & price matrix
+                # =========================
+                st.write("Building price matrix...")
+                all_strikes = sorted(
+                    set().union(*[set(chains[e]["strike"]) for e in expiries])
                 )
-            else:
-                df_interp = df_raw.copy()
+                strikes = np.array(all_strikes, dtype=float)
 
-            st.subheader("Interpolated surface used for plots")
-            st.dataframe(df_interp)
+                price_matrix = np.zeros((len(maturities), len(strikes))) * np.nan
 
-            # =========================
-            # 5) Heatmap 2D
-            # =========================
-            st.subheader("Heatmap (vol vs strike & maturity)")
+                progress_bar = st.progress(0)
 
-            fig_hm, ax_hm = plt.subplots(figsize=(8, 5))
-            cax = ax_hm.imshow(
-                df_interp.values,
-                aspect="auto",
-                origin="lower",
-                extent=[strikes.min(), strikes.max(), min(maturities), max(maturities)]
-            )
-            ax_hm.set_xlabel("Strike")
-            ax_hm.set_ylabel("Maturity (years)")
-            fig_hm.colorbar(cax, label="Implied Volatility")
-            st.pyplot(fig_hm)
+                for i, e in enumerate(expiries):
+                    df = chains[e].copy()
+                    df = df.set_index("strike")
 
-            # =========================
-            # 6) 3D surface (optionnel)
-            # =========================
-            if show_3d:
+                    for j, K in enumerate(strikes):
+                        if K in df.index:
+                            price_matrix[i, j] = float(df.loc[K]["lastPrice"])
+                    progress_bar.progress((i + 1) / len(expiries))
+
+                # On enlève les colonnes entièrement NaN
+                valid_cols = ~np.isnan(price_matrix).all(axis=0)
+                strikes = strikes[valid_cols]
+                price_matrix = price_matrix[:, valid_cols]
+
+                # =========================
+                # 3) Calibrateur BS -> surface de vol
+                # =========================
+                st.write("Calibrating Volatility Surface (this may take a while)...")
+                cal = Calibrator(
+                    strikes=strikes,
+                    maturities=maturities,
+                    S0=S0,
+                    r=r,
+                    price_matrix=price_matrix
+                )
+
+                vol_surface = cal.build_surface()  # objet VolatilitySurface
+
+                # surface brute
+                raw_matrix = vol_surface.surface  # shape (len(maturities), len(strikes))
+
+                df_raw = pd.DataFrame(
+                    raw_matrix,
+                    index=maturities,
+                    columns=strikes
+                )
+
+
+                # =========================
+                # 4) Interpolation (simple bilinéaire)
+                # =========================
+                st.write("Bilinear interpolation...")
+                if interp_method == "Bilinear (2D interpolation)":
+
+                    df_interp = (
+                        df_raw
+                        .interpolate(axis=1, limit_direction="both")
+                        .interpolate(axis=0, limit_direction="both")
+                    )
+                else:
+                    df_interp = df_raw.copy()
+
+                # =========================
+                # 5) Heatmap 2D
+                # =========================
+                st.write("Creating 2D heatmap...")
+
+                fig_hm, ax_hm = plt.subplots(figsize=(8, 5))
+                cax = ax_hm.imshow(
+                    df_interp.values,
+                    aspect="auto",
+                    origin="lower",
+                    extent=[strikes.min(), strikes.max(), min(maturities), max(maturities)]
+                )
+
+                # =========================
+                # 6) 3D surface (optionnel)
+                # =========================
+                if show_3d:
+                    st.write("printing 3D surface...")
+
+                    K_grid, T_grid = np.meshgrid(strikes, maturities)
+                    Z = df_interp.values
+
+                    fig3d = plt.figure(figsize=(8, 5))
+                    ax3d = fig3d.add_subplot(111, projection="3d")
+                    surf = ax3d.plot_surface(K_grid, T_grid, Z, cmap="viridis")
+                    ax3d.set_xlabel("Strike")
+                    ax3d.set_ylabel("Maturity (years)")
+                    ax3d.set_zlabel("Implied Volatility")
+                    fig3d.colorbar(surf, shrink=0.5, aspect=10)
+
+                ################
+                #printing result
+                ################
+                st.subheader("Raw implied volatility surface")
+                st.dataframe(df_raw)
+
+                st.subheader("Interpolated surface used for plots")
+                st.dataframe(df_interp)
+
+                ax_hm.set_xlabel("Strike")
+                ax_hm.set_ylabel("Maturity (years)")
+                fig_hm.colorbar(cax, label="Implied Volatility")
+
+                st.subheader("Heatmap (vol vs strike & maturity)")
+                st.pyplot(fig_hm)
+
                 st.subheader("3D volatility surface")
-
-                K_grid, T_grid = np.meshgrid(strikes, maturities)
-                Z = df_interp.values
-
-                fig3d = plt.figure(figsize=(8, 5))
-                ax3d = fig3d.add_subplot(111, projection="3d")
-                surf = ax3d.plot_surface(K_grid, T_grid, Z, cmap="viridis")
-                ax3d.set_xlabel("Strike")
-                ax3d.set_ylabel("Maturity (years)")
-                ax3d.set_zlabel("Implied Volatility")
-                fig3d.colorbar(surf, shrink=0.5, aspect=10)
                 st.pyplot(fig3d)
 
-            # =========================
-            # 7) Skew & term structure
-            # =========================
-            st.subheader("Skew & Term Structure analysis")
+                # =========================
+                # 7) Skew & term structure
+                # =========================
 
-            colA, colB = st.columns(2)
+                st.subheader("Skew & Term Structure analysis")
 
-            with colA:
-                # Skew: vol(K) pour une maturité choisie
-                chosen_T = st.selectbox(
-                    "Maturity for skew (years)",
-                    options=list(df_interp.index),
-                    format_func=lambda x: f"{x:.4f}",
-                    key="surf_skew_T"
-                )
+                colA, colB = st.columns(2)
 
-                vol_skew = df_interp.loc[chosen_T]
+                with colA:
+                    # Skew: vol(K) pour une maturité choisie
+                    chosen_T = st.selectbox(
+                        "Maturity for skew (years)",
+                        options=list(df_interp.index),
+                        format_func=lambda x: f"{x:.4f}",
+                        key="surf_skew_T"
+                    )
 
-                fig_skew, ax_skew = plt.subplots(figsize=(6, 4))
-                ax_skew.plot(df_interp.columns, vol_skew)
-                ax_skew.set_xlabel("Strike")
-                ax_skew.set_ylabel("Implied Volatility")
-                ax_skew.set_title(f"Skew at T = {chosen_T:.4f} years")
-                st.pyplot(fig_skew)
+                    vol_skew = df_interp.loc[chosen_T]
 
-            with colB:
-                # Term structure: vol(T) pour un strike choisi
-                chosen_K = st.selectbox(
-                    "Strike for term structure",
-                    options=list(df_interp.columns),
-                    key="surf_term_K"
-                )
+                    fig_skew, ax_skew = plt.subplots(figsize=(6, 4))
+                    ax_skew.plot(df_interp.columns, vol_skew)
+                    ax_skew.set_xlabel("Strike")
+                    ax_skew.set_ylabel("Implied Volatility")
+                    ax_skew.set_title(f"Skew at T = {chosen_T:.4f} years")
+                    st.pyplot(fig_skew)
 
-                vol_term = df_interp[chosen_K]
 
-                fig_term, ax_term = plt.subplots(figsize=(6, 4))
-                ax_term.plot(df_interp.index, vol_term)
-                ax_term.set_xlabel("Maturity (years)")
-                ax_term.set_ylabel("Implied Volatility")
-                ax_term.set_title(f"Term structure at K = {chosen_K:.2f}")
-                st.pyplot(fig_term)
+                with colB:
+                    # Term structure: vol(T) pour un strike choisi
+                    chosen_K = st.selectbox(
+                        "Strike for term structure",
+                        options=list(df_interp.columns),
+                        key="surf_term_K"
+                    )
+
+                    vol_term = df_interp[chosen_K]
+
+                    fig_term, ax_term = plt.subplots(figsize=(6, 4))
+                    ax_term.plot(df_interp.index, vol_term)
+                    ax_term.set_xlabel("Maturity (years)")
+                    ax_term.set_ylabel("Implied Volatility")
+                    ax_term.set_title(f"Term structure at K = {chosen_K:.2f}")
+                    st.pyplot(fig_term)
+
+
+                status.update(label="Calibration Complete!", state="complete", expanded=False)
+
+
+
+
+
 
         except Exception as e:
             st.error(f"Error while computing volatility surface: {e}")

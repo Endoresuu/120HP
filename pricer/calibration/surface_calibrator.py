@@ -1,4 +1,5 @@
 import numpy as np
+import streamlit as st
 from pricer.products.market_option import MarketOption
 from pricer.market.vol_surface import VolatilitySurface
 from pricer.calibration.implied_vol import NewtonImpliedVolSolver
@@ -15,6 +16,7 @@ class Calibrator:
 
     def build_surface(self):
         vol_surface = VolatilitySurface(self.strikes, self.maturities)
+        progress_bar1 = st.progress(0)
 
         for i, T in enumerate(self.maturities):
             for j, K in enumerate(self.strikes):
@@ -23,5 +25,7 @@ class Calibrator:
 
                 sigma = self.solver.solve(opt, sigma0=0.25)
                 vol_surface.set_vol(i, j, sigma)
+
+            progress_bar1.progress((i + 1) / len(self.maturities))
 
         return vol_surface
