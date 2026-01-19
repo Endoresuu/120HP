@@ -16,7 +16,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import numpy as np
-import pandas as pdgit 
+import pandas as pd
 from datetime import datetime
 from mpl_toolkits.mplot3d import Axes3D  # nécessaire pour le 3D
 
@@ -129,8 +129,8 @@ def get_market_call_price_from_chain(chains, expiry, K):
 # -------------------------
 #   TABS
 # -------------------------
-tab_price, tab_smile, tab_surface, tab_heston, tab_greeks, tab_calib = st.tabs(
-    ["Pricer", "Volatility Smile", "Volatility Surface", "Heston Monte Carlo", "Greeks", "Calibration BS/Heston"]
+tab_price, tab_smile, tab_surface, tab_heston, tab_greeks= st.tabs(
+    ["Pricer", "Volatility Smile", "Volatility Surface", "Heston Monte Carlo", "Greeks"]
 )
 
 with tab_price:
@@ -388,31 +388,40 @@ with tab_heston:
     if st.button("Run Heston simulation", key="h_run"):
 
         try:
-            # ---- Market Data with T included ----
+            # ---- Market Data ----
             market = MarketData(spot=S0, r=r)
-            market.T = float(T)
-            market.v_0 = float(v0)
-            market.kappa = float(kappa)
-            market.theta = float(theta)
-            market.sigma_v = float(sigma_v)
-            market.rho = float(rho)
-            market.n_steps = int(n_steps)
-            market.n_paths = int(n_paths)
 
             # ---- Option ----
             option = EuropeanCall(K, T) if opt_type == "Call" else EuropeanPut(K, T)
 
             # ---- Heston model ----
-            heston = HestonModel()
-            S_paths, v_paths = heston.simulate_paths(market)
+            heston = HestonModel(
+                v0=v0,
+                kappa=kappa,
+                theta=theta,
+                sigma_v=sigma_v,
+                rho=rho,
+                n_steps=int(n_steps),
+                n_paths=int(n_paths)
+            )
 
             # ---- Pricing ----
             price_heston = heston.price_european(option, market)
             st.success(f"Heston MC price = {price_heston:.4f}")
 
+            # ---- (Optionnel) trajectoires ----
+            S_paths = heston.simulate_paths(market, option.T)
+
+            # Exemple : afficher une trajectoire
+            fig, ax = plt.subplots()
+            ax.plot(S_paths[0, :])
+            ax.set_title("Sample Heston path")
+            ax.set_xlabel("Time step")
+            ax.set_ylabel("Spot")
+            st.pyplot(fig)
+
         except Exception as e:
             st.error(f"Error in Heston Monte Carlo: {e}")
-
 
 with tab_smile:
 
@@ -647,61 +656,6 @@ with tab_surface:
 
         except Exception as e:
             st.error(f"Error while computing volatility surface: {e}")
-
-
-with tab_calib:
-
-    st.subheader("Model Calibration (BS / Heston)")
-
-    ticker_c = st.text_input("Ticker", value="SPY", key="cal_ticker")
-    method_c = st.radio("Model to calibrate", ["Black-Scholes", "Heston"], key="cal_model")
-
-    if st.button("Run Calibration", key="cal_btn"):
-
-        try:
-            if method_c == "Black-Scholes":
-                cal = MarketSmileCalibrator(ticker_c)
-                df = cal.compute_smile()
-                st.dataframe(df)
-                st.success("BS calibration finished!")
-
-            else:
-                st.info("Heston calibration requires implementation.")
-                # Je peux te coder une vraie calibration Heston si tu veux.
-
-        except Exception as e:
-            st.error(f"Calibration error: {e}")
-
-
-    st.subheader("Greeks (Black–Scholes)")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        S0_g = st.number_input("Spot", value=100.0, key="grk_S0")
-        K_g = st.number_input("Strike", value=100.0, key="grk_K")
-        T_g = st.number_input("Maturity", value=1.0, key="grk_T")
-
-    with col2:
-        r_g = st.number_input("Rate", value=0.04, key="grk_r")
-        sigma_g = st.number_input("Volatility", value=0.20, key="grk_sigma")
-        opt_type_g = st.radio("Option type", ["Call", "Put"], key="grk_type")
-
-    if st.button("Compute Greeks", key="grk_btn"):
-
-        try:
-            market = MarketData(spot=S0_g, r=r_g, q=0.0)
-            model = BlackScholesModel(market_data=market, sigma=sigma_g)
-            opt = EuropeanCall(K_g, T_g) if opt_type_g == "Call" else EuropeanPut(K_g, T_g)
-
-            greeks = model.greeks(opt)
-
-            st.success("Greeks computed!")
-            st.json(greeks)
-
-        except Exception as e:
-            st.error(f"Error computing Greeks: {e}")
-
 
 from pricer.models.bs_greeks import (
     delta_call, delta_put, gamma, vega, theta_call, theta_put, rho_call, rho_put
