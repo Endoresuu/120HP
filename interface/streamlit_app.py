@@ -10,6 +10,7 @@ from pricer.products.vanilla import EuropeanCall, EuropeanPut
 from pricer.calibration.market_calibrator import MarketSmileCalibrator
 from pricer.calibration.surface_calibrator import Calibrator
 from pricer.market.import_data import get_option_chain, get_close_price
+from pricer.calibration.implied_vol import NewtonImpliedVolSolver
 from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
