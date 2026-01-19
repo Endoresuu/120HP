@@ -14,6 +14,7 @@ from pricer.market.import_data import get_option_chain, get_close_price
 from pricer.calibration.implied_vol import NewtonImpliedVolSolver
 from datetime import datetime
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -448,11 +449,9 @@ with tab_surface:
 
     interp_method = st.selectbox(
         "Interpolation method",
-        ["None", "Bilinear (2D interpolation)"],
+        ["Bilinear (2D interpolation)"],
         key="surf_interp_method"
     )
-
-    show_3d = st.checkbox("Show 3D surface", value=False, key="surf_show_3d")
 
     if st.button("Compute Volatility Surface", key="surf_btn"):
 
@@ -554,19 +553,26 @@ with tab_surface:
                 # =========================
                 # 6) 3D surface (optionnel)
                 # =========================
-                if show_3d:
-                    st.write("printing 3D surface...")
 
-                    K_grid, T_grid = np.meshgrid(strikes, maturities)
-                    Z = df_interp.values
+                st.write("printing 3D surface...")
 
-                    fig3d = plt.figure(figsize=(8, 5))
-                    ax3d = fig3d.add_subplot(111, projection="3d")
-                    surf = ax3d.plot_surface(K_grid, T_grid, Z, cmap="viridis")
-                    ax3d.set_xlabel("Strike")
-                    ax3d.set_ylabel("Maturity (years)")
-                    ax3d.set_zlabel("Implied Volatility")
-                    fig3d.colorbar(surf, shrink=0.5, aspect=10)
+                K_grid, T_grid = np.meshgrid(strikes, maturities)
+                Z = df_interp.values
+
+                # Création de la figure interactive avec Plotly
+                fig = go.Figure(data=[go.Surface(z=Z, x=K_grid, y=T_grid, colorscale='Viridis')])
+
+                # Mise à jour du layout pour les labels
+                fig.update_layout(
+                    title='Surface de Volatilité Impliquée',
+                    scene=dict(
+                        xaxis_title='Strike',
+                        yaxis_title='Maturity (years)',
+                        zaxis_title='Implied Volatility'
+                    ),
+                    margin=dict(l=0, r=0, b=0, t=40),
+                    autosize=True
+)
 
                 ################
                 #printing result
@@ -585,7 +591,7 @@ with tab_surface:
                 st.pyplot(fig_hm)
 
                 st.subheader("3D volatility surface")
-                st.pyplot(fig3d)
+                st.plotly_chart(fig, use_container_width=True)
 
                 # =========================
                 # 7) Skew & term structure
