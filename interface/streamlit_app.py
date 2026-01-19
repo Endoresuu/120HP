@@ -709,24 +709,26 @@ from pricer.models.bs_greeks import (
 
 with tab_greeks:
 
-    st.subheader("Black–Scholes Greeks")
+    st.header("Greeks analysis")
 
-    # ===========================
-    # 1) Paramètres de base
-    # ===========================
+    # =====================================================
+    # 1) BLACK–SCHOLES GREEKS – POINT VALUES
+    # =====================================================
+    st.subheader("Black–Scholes Greeks (point values)")
+
     col1, col2 = st.columns(2)
 
     with col1:
-        S = st.number_input("Spot S₀", value=100.0, key="g_S0")
-        K = st.number_input("Strike K", value=100.0, key="g_K0")
-        T = st.number_input("Maturity T (years)", value=1.0, key="g_T0")
+        S = st.number_input("Spot S₀", value=100.0, key="g_S")
+        K = st.number_input("Strike K", value=100.0, key="g_K")
+        T = st.number_input("Maturity T (years)", value=1.0, key="g_T")
 
     with col2:
-        r = st.number_input("Risk-free rate r", value=0.04, key="g_r0")
-        sigma = st.number_input("Volatility σ", value=0.20, key="g_sigma0")
-        opt_type = st.radio("Option type", ["Call", "Put"], key="g_opt_type0")
+        r = st.number_input("Risk-free rate r", value=0.04, key="g_r")
+        sigma = st.number_input("Volatility σ", value=0.20, key="g_sigma")
+        opt_type = st.radio("Option type", ["Call", "Put"], key="g_type")
 
-    if st.button("Compute BS Greeks", key="g_btn_bs"):
+    if st.button("Compute BS Greeks", key="g_btn_point"):
 
         try:
             if opt_type == "Call":
@@ -741,256 +743,460 @@ with tab_greeks:
             gamma_val = gamma(S, K, r, sigma, T)
             vega_val  = vega(S, K, r, sigma, T)
 
-            st.success("Greeks computed at (S, K, T)")
+            st.success("Greeks computed")
 
-            st.write(f"**Delta:** {delta_val:.6f}")
-            st.write(f"**Gamma:** {gamma_val:.6f}")
-            st.write(f"**Vega:**  {vega_val:.6f}")
-            st.write(f"**Theta:** {theta_val:.6f}")
-            st.write(f"**Rho:**   {rho_val:.6f}")
+            st.metric("Delta", f"{delta_val:.6f}")
+            st.metric("Gamma", f"{gamma_val:.6f}")
+            st.metric("Vega",  f"{vega_val:.6f}")
+            st.metric("Theta", f"{theta_val:.6f}")
+            st.metric("Rho",   f"{rho_val:.6f}")
 
         except Exception as e:
-            st.error(f"Error computing BS Greeks: {e}")
-
+            st.error(f"BS Greeks error: {e}")
 
     st.markdown("---")
-    st.subheader("BS Greeks profiles vs Strike")
 
-    # ===========================
-    # 2) Profils des Greeks vs K
-    # ===========================
+    # =====================================================
+    # 2) GREEKS PROFILES VS STRIKE (VECTORISED)
+    # =====================================================
+    st.subheader("Greeks profiles vs Strike")
+
     colK1, colK2 = st.columns(2)
-
     with colK1:
-        k_min_factor = st.number_input("Min strike factor (×K)", value=0.5, key="g_k_min_factor")
-        k_max_factor = st.number_input("Max strike factor (×K)", value=1.5, key="g_k_max_factor")
-
+        k_min_factor = st.number_input("Min K factor", value=0.5, key="g_kmin")
+        k_max_factor = st.number_input("Max K factor", value=1.5, key="g_kmax")
     with colK2:
-        n_points = st.number_input("Number of strikes", value=50, min_value=10, max_value=300, key="g_k_npoints")
+        n_points = st.number_input("Number of points", value=80, min_value=20, max_value=300, key="g_kn")
 
-    if st.button("Plot BS Greeks vs Strike", key="g_btn_greeks_vs_k"):
+    if st.button("Plot Greeks vs Strike", key="g_btn_vs_k"):
 
         try:
-            if K <= 0 or S <= 0 or T <= 0 or sigma <= 0:
-                st.error("S, K, T, σ must be strictly positive.")
-                st.stop()
+            K_grid = np.linspace(k_min_factor*K, k_max_factor*K, int(n_points))
 
-            K_min = max(1e-6, k_min_factor * K)
-            K_max = max(K_min + 1e-6, k_max_factor * K)
+            if opt_type == "Call":
+                delta_vals = delta_call(S, K_grid, r, sigma, T)
+                theta_vals = theta_call(S, K_grid, r, sigma, T)
+                rho_vals   = rho_call(S, K_grid, r, sigma, T)
+            else:
+                delta_vals = delta_put(S, K_grid, r, sigma, T)
+                theta_vals = theta_put(S, K_grid, r, sigma, T)
+                rho_vals   = rho_put(S, K_grid, r, sigma, T)
 
-            K_grid = np.linspace(K_min, K_max, int(n_points))
+            gamma_vals = gamma(S, K_grid, r, sigma, T)
+            vega_vals  = vega(S, K_grid, r, sigma, T)
 
-            delta_list = []
-            gamma_list = []
-            vega_list  = []
-            theta_list = []
-            rho_list   = []
+            greeks = {
+                "Delta": delta_vals,
+                "Gamma": gamma_vals,
+                "Vega": vega_vals,
+                "Theta": theta_vals,
+                "Rho": rho_vals
+            }
 
-            for K_i in K_grid:
-                if opt_type == "Call":
-                    delta_i = delta_call(S, K_i, r, sigma, T)
-                    theta_i = theta_call(S, K_i, r, sigma, T)
-                    rho_i   = rho_call(S, K_i, r, sigma, T)
-                else:
-                    delta_i = delta_put(S, K_i, r, sigma, T)
-                    theta_i = theta_put(S, K_i, r, sigma, T)
-                    rho_i   = rho_put(S, K_i, r, sigma, T)
-
-                gamma_i = gamma(S, K_i, r, sigma, T)
-                vega_i  = vega(S, K_i, r, sigma, T)
-
-                delta_list.append(delta_i)
-                gamma_list.append(gamma_i)
-                vega_list.append(vega_i)
-                theta_list.append(theta_i)
-                rho_list.append(rho_i)
-
-            # Plot Delta
-            fig_d, ax_d = plt.subplots(figsize=(6,4))
-            ax_d.plot(K_grid, delta_list)
-            ax_d.set_title("Delta vs Strike")
-            ax_d.set_xlabel("Strike K")
-            ax_d.set_ylabel("Delta")
-            st.pyplot(fig_d)
-
-            # Plot Gamma
-            fig_g, ax_g = plt.subplots(figsize=(6,4))
-            ax_g.plot(K_grid, gamma_list)
-            ax_g.set_title("Gamma vs Strike")
-            ax_g.set_xlabel("Strike K")
-            ax_g.set_ylabel("Gamma")
-            st.pyplot(fig_g)
-
-            # Plot Vega
-            fig_v, ax_v = plt.subplots(figsize=(6,4))
-            ax_v.plot(K_grid, vega_list)
-            ax_v.set_title("Vega vs Strike")
-            ax_v.set_xlabel("Strike K")
-            ax_v.set_ylabel("Vega")
-            st.pyplot(fig_v)
-
-            # Plot Theta
-            fig_t, ax_t = plt.subplots(figsize=(6,4))
-            ax_t.plot(K_grid, theta_list)
-            ax_t.set_title("Theta vs Strike")
-            ax_t.set_xlabel("Strike K")
-            ax_t.set_ylabel("Theta")
-            st.pyplot(fig_t)
-
-            # Plot Rho
-            fig_r, ax_r = plt.subplots(figsize=(6,4))
-            ax_r.plot(K_grid, rho_list)
-            ax_r.set_title("Rho vs Strike")
-            ax_r.set_xlabel("Strike K")
-            ax_r.set_ylabel("Rho")
-            st.pyplot(fig_r)
-
-            # Export CSV
-            df_greeks = pd.DataFrame({
-                "K": K_grid,
-                "Delta": delta_list,
-                "Gamma": gamma_list,
-                "Vega": vega_list,
-                "Theta": theta_list,
-                "Rho": rho_list
-            })
-
-            csv = df_greeks.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="Download Greeks vs Strike as CSV",
-                data=csv,
-                file_name="bs_greeks_vs_strike.csv",
-                mime="text/csv",
-                key="g_dl_greeks_csv"
-            )
+            for name, values in greeks.items():
+                fig, ax = plt.subplots(figsize=(6,4))
+                ax.plot(K_grid, values)
+                ax.set_title(f"{name} vs Strike")
+                ax.set_xlabel("Strike K")
+                ax.set_ylabel(name)
+                ax.grid(True)
+                st.pyplot(fig)
 
         except Exception as e:
-            st.error(f"Error computing Greeks profiles: {e}")
-
+            st.error(f"Greeks vs Strike error: {e}")
 
     st.markdown("---")
+
+    # =====================================================
+    # 3) GAMMA HEATMAP Γ(S, K)
+    # =====================================================
     st.subheader("Gamma heatmap Γ(S, K)")
 
-    # ===========================
-    # 3) Heatmap Gamma(S,K)
-    # ===========================
     colH1, colH2 = st.columns(2)
-
     with colH1:
-        s_min_factor = st.number_input("Min spot factor (×S₀)", value=0.5, key="g_s_min_factor")
-        s_max_factor = st.number_input("Max spot factor (×S₀)", value=1.5, key="g_s_max_factor")
-
+        s_min_factor = st.number_input("Min S factor", value=0.5, key="g_smin")
+        s_max_factor = st.number_input("Max S factor", value=1.5, key="g_smax")
     with colH2:
-        grid_S = st.number_input("Grid size S dimension", value=30, min_value=10, max_value=100, key="g_s_grid")
-        grid_K = st.number_input("Grid size K dimension", value=30, min_value=10, max_value=100, key="g_k_grid_heat")
+        grid_S = st.number_input("Grid size S", value=40, key="g_grid_s")
+        grid_K = st.number_input("Grid size K", value=40, key="g_grid_k")
 
-    if st.button("Plot Gamma heatmap", key="g_btn_gamma_heat"):
+    if st.button("Plot Gamma heatmap", key="g_btn_heat"):
 
         try:
-            S_min = max(1e-6, s_min_factor * S)
-            S_max = max(S_min + 1e-6, s_max_factor * S)
-            K_min = max(1e-6, 0.5 * K)
-            K_max = max(K_min + 1e-6, 1.5 * K)
+            S_vals = np.linspace(s_min_factor*S, s_max_factor*S, int(grid_S))
+            K_vals = np.linspace(0.5*K, 1.5*K, int(grid_K))
 
-            S_vals = np.linspace(S_min, S_max, int(grid_S))
-            K_vals = np.linspace(K_min, K_max, int(grid_K))
+            S_grid, K_grid = np.meshgrid(S_vals, K_vals, indexing="ij")
+            gamma_matrix = gamma(S_grid, K_grid, r, sigma, T)
 
-            gamma_matrix = np.zeros((len(S_vals), len(K_vals)))
-
-            for i, S_i in enumerate(S_vals):
-                for j, K_j in enumerate(K_vals):
-                    gamma_matrix[i, j] = gamma(S_i, K_j, r, sigma, T)
-
-            fig_h, ax_h = plt.subplots(figsize=(7,5))
-            cax = ax_h.imshow(
+            fig, ax = plt.subplots(figsize=(7,5))
+            im = ax.imshow(
                 gamma_matrix,
                 origin="lower",
                 aspect="auto",
                 extent=[K_vals[0], K_vals[-1], S_vals[0], S_vals[-1]]
             )
-            ax_h.set_xlabel("Strike K")
-            ax_h.set_ylabel("Spot S")
-            ax_h.set_title("Gamma heatmap Γ(S, K)")
-            fig_h.colorbar(cax, label="Gamma")
-            st.pyplot(fig_h)
+            ax.set_xlabel("Strike K")
+            ax.set_ylabel("Spot S")
+            ax.set_title("Gamma heatmap")
+            fig.colorbar(im, ax=ax, label="Gamma")
+            st.pyplot(fig)
 
         except Exception as e:
-            st.error(f"Error plotting Gamma heatmap: {e}")
-
+            st.error(f"Gamma heatmap error: {e}")
 
     st.markdown("---")
+
+    # =====================================================
+    # 4) HESTON GREEKS – MONTE CARLO (CRN)
+    # =====================================================
     st.subheader("Heston Greeks (Monte Carlo bump)")
 
-    # ===========================
-    # 4) Heston MC Greeks
-    # ===========================
-    colHes1, colHes2 = st.columns(2)
-
-    with colHes1:
-        S0_h = st.number_input("Heston S₀", value=100.0, key="hg_S0")
-        K_h = st.number_input("Heston Strike K", value=100.0, key="hg_K")
-        T_h = st.number_input("Heston T (years)", value=1.0, key="hg_T")
+    colH1, colH2 = st.columns(2)
+    with colH1:
+        S0_h = st.number_input("Heston S₀", value=100.0, key="hg_S")
+        K_h = st.number_input("Heston K", value=100.0, key="hg_K")
+        T_h = st.number_input("Heston T", value=1.0, key="hg_T")
         r_h = st.number_input("Heston r", value=0.04, key="hg_r")
-        opt_type_h = st.radio("Heston option type", ["Call", "Put"], key="hg_opt_type")
+        opt_type_h = st.radio("Heston option type", ["Call", "Put"], key="hg_type")
 
-    with colHes2:
-        v0_h = st.number_input("Heston v₀", value=0.04, key="hg_v0")
-        kappa_h = st.number_input("κ", value=1.5, key="hg_kappa")
-        theta_h = st.number_input("θ", value=0.04, key="hg_theta")
-        sigma_v_h = st.number_input("σᵥ", value=0.3, key="hg_sigma_v")
-        rho_h = st.number_input("ρ", value=-0.7, key="hg_rho")
-        n_steps_h = st.number_input("Time steps (Heston)", value=100, key="hg_steps")
-        n_paths_h = st.number_input("MC paths (Heston)", value=5000, key="hg_paths")
+    with colH2:
+        v0 = st.number_input("v₀", value=0.04, key="hg_v0")
+        kappa = st.number_input("κ", value=1.5, key="hg_kappa")
+        theta = st.number_input("θ", value=0.04, key="hg_theta")
+        sigma_v = st.number_input("σᵥ", value=0.3, key="hg_sigma_v")
+        rho = st.number_input("ρ", value=-0.7, key="hg_rho")
+        n_steps = st.number_input("Time steps", value=100, key="hg_steps")
+        n_paths = st.number_input("MC paths", value=5000, key="hg_paths")
 
-    colBump1, colBump2 = st.columns(2)
-    with colBump1:
-        bump_S = st.number_input("Bump for S (ΔS)", value=1.0, key="hg_bump_S")
-    with colBump2:
-        bump_v = st.number_input("Bump for v₀ (Δv₀)", value=0.01, key="hg_bump_v")
+    bump_S = st.number_input("ΔS", value=1.0, key="hg_bump_S")
+    bump_v = st.number_input("Δv₀", value=0.01, key="hg_bump_v")
 
-    def heston_price_once(S0_local, v0_local):
-        market_h = MarketData(spot=S0_local, r=r_h)
-        market_h.T = float(T_h)
-        market_h.v_0 = float(v0_local)
-        market_h.kappa = float(kappa_h)
-        market_h.theta = float(theta_h)
-        market_h.sigma_v = float(sigma_v_h)
-        market_h.rho = float(rho_h)
-        market_h.n_steps = int(n_steps_h)
-        market_h.n_paths = int(n_paths_h)
+    def heston_price(S0_loc, v0_loc, seed=42):
+        np.random.seed(seed)
+        market = MarketData(spot=S0_loc, r=r_h)
+        market.T = T_h
+        market.v_0 = v0_loc
+        market.kappa = kappa
+        market.theta = theta
+        market.sigma_v = sigma_v
+        market.rho = rho
+        market.n_steps = int(n_steps)
+        market.n_paths = int(n_paths)
 
-        if opt_type_h == "Call":
-            opt_h = EuropeanCall(K_h, T_h)
-        else:
-            opt_h = EuropeanPut(K_h, T_h)
-
-        model_h = HestonModel()
-        price_h = model_h.price_european(opt_h, market_h)
-        return price_h
+        opt = EuropeanCall(K_h, T_h) if opt_type_h == "Call" else EuropeanPut(K_h, T_h)
+        model = HestonModel()
+        return model.price_european(opt, market)
 
     if st.button("Compute Heston MC Greeks", key="hg_btn"):
 
         try:
-            # Prix de base
-            P0 = heston_price_once(S0_h, v0_h)
+            seed = 123
 
-            # Delta & Gamma via bump sur S
-            P_up_S = heston_price_once(S0_h + bump_S, v0_h)
-            P_dn_S = heston_price_once(S0_h - bump_S, v0_h)
+            P0 = heston_price(S0_h, v0, seed)
+            P_up = heston_price(S0_h + bump_S, v0, seed)
+            P_dn = heston_price(S0_h - bump_S, v0, seed)
 
-            delta_h = (P_up_S - P_dn_S) / (2 * bump_S)
-            gamma_h = (P_up_S - 2*P0 + P_dn_S) / (bump_S**2)
+            delta_h = (P_up - P_dn) / (2*bump_S)
+            gamma_h = (P_up - 2*P0 + P_dn) / (bump_S**2)
 
-            # "Vega" Heston via bump sur v0
-            P_up_v = heston_price_once(S0_h, v0_h + bump_v)
-            P_dn_v = heston_price_once(S0_h, v0_h - bump_v)
-            vega_h = (P_up_v - P_dn_v) / (2 * bump_v)
+            P_v_up = heston_price(S0_h, v0 + bump_v, seed)
+            P_v_dn = heston_price(S0_h, v0 - bump_v, seed)
+            vega_h = (P_v_up - P_v_dn) / (2*bump_v)
 
-            st.success("Heston MC Greeks computed:")
-
-            st.write(f"**Delta (MC, Heston):** {delta_h:.6f}")
-            st.write(f"**Gamma (MC, Heston):** {gamma_h:.6f}")
-            st.write(f"**Vega wrt v₀ (MC, Heston):** {vega_h:.6f}")
+            st.success("Heston Greeks computed")
+            st.write(f"**Delta:** {delta_h:.6f}")
+            st.write(f"**Gamma:** {gamma_h:.6f}")
+            st.write(f"**Vega (v₀):** {vega_h:.6f}")
 
         except Exception as e:
-            st.error(f"Error computing Heston MC Greeks: {e}")
+            st.error(f"Heston Greeks error: {e}")
+
+
+# with tab_greeks:
+
+#     st.subheader("Black–Scholes Greeks")
+
+#     # ===========================
+#     # 1) Paramètres de base
+#     # ===========================
+#     col1, col2 = st.columns(2)
+
+#     with col1:
+#         S = st.number_input("Spot S₀", value=100.0, key="g_S0")
+#         K = st.number_input("Strike K", value=100.0, key="g_K0")
+#         T = st.number_input("Maturity T (years)", value=1.0, key="g_T0")
+
+#     with col2:
+#         r = st.number_input("Risk-free rate r", value=0.04, key="g_r0")
+#         sigma = st.number_input("Volatility σ", value=0.20, key="g_sigma0")
+#         opt_type = st.radio("Option type", ["Call", "Put"], key="g_opt_type0")
+
+#     if st.button("Compute BS Greeks", key="g_btn_bs"):
+
+#         try:
+#             if opt_type == "Call":
+#                 delta_val = delta_call(S, K, r, sigma, T)
+#                 theta_val = theta_call(S, K, r, sigma, T)
+#                 rho_val   = rho_call(S, K, r, sigma, T)
+#             else:
+#                 delta_val = delta_put(S, K, r, sigma, T)
+#                 theta_val = theta_put(S, K, r, sigma, T)
+#                 rho_val   = rho_put(S, K, r, sigma, T)
+
+#             gamma_val = gamma(S, K, r, sigma, T)
+#             vega_val  = vega(S, K, r, sigma, T)
+
+#             st.success("Greeks computed at (S, K, T)")
+
+#             st.write(f"**Delta:** {delta_val:.6f}")
+#             st.write(f"**Gamma:** {gamma_val:.6f}")
+#             st.write(f"**Vega:**  {vega_val:.6f}")
+#             st.write(f"**Theta:** {theta_val:.6f}")
+#             st.write(f"**Rho:**   {rho_val:.6f}")
+
+#         except Exception as e:
+#             st.error(f"Error computing BS Greeks: {e}")
+
+
+#     st.markdown("---")
+#     st.subheader("BS Greeks profiles vs Strike")
+
+#     # ===========================
+#     # 2) Profils des Greeks vs K
+#     # ===========================
+#     colK1, colK2 = st.columns(2)
+
+#     with colK1:
+#         k_min_factor = st.number_input("Min strike factor (×K)", value=0.5, key="g_k_min_factor")
+#         k_max_factor = st.number_input("Max strike factor (×K)", value=1.5, key="g_k_max_factor")
+
+#     with colK2:
+#         n_points = st.number_input("Number of strikes", value=50, min_value=10, max_value=300, key="g_k_npoints")
+
+#     if st.button("Plot BS Greeks vs Strike", key="g_btn_greeks_vs_k"):
+
+#         try:
+#             if K <= 0 or S <= 0 or T <= 0 or sigma <= 0:
+#                 st.error("S, K, T, σ must be strictly positive.")
+#                 st.stop()
+
+#             K_min = max(1e-6, k_min_factor * K)
+#             K_max = max(K_min + 1e-6, k_max_factor * K)
+
+#             K_grid = np.linspace(K_min, K_max, int(n_points))
+
+#             delta_list = []
+#             gamma_list = []
+#             vega_list  = []
+#             theta_list = []
+#             rho_list   = []
+
+#             for K_i in K_grid:
+#                 if opt_type == "Call":
+#                     delta_i = delta_call(S, K_i, r, sigma, T)
+#                     theta_i = theta_call(S, K_i, r, sigma, T)
+#                     rho_i   = rho_call(S, K_i, r, sigma, T)
+#                 else:
+#                     delta_i = delta_put(S, K_i, r, sigma, T)
+#                     theta_i = theta_put(S, K_i, r, sigma, T)
+#                     rho_i   = rho_put(S, K_i, r, sigma, T)
+
+#                 gamma_i = gamma(S, K_i, r, sigma, T)
+#                 vega_i  = vega(S, K_i, r, sigma, T)
+
+#                 delta_list.append(delta_i)
+#                 gamma_list.append(gamma_i)
+#                 vega_list.append(vega_i)
+#                 theta_list.append(theta_i)
+#                 rho_list.append(rho_i)
+
+#             # Plot Delta
+#             fig_d, ax_d = plt.subplots(figsize=(6,4))
+#             ax_d.plot(K_grid, delta_list)
+#             ax_d.set_title("Delta vs Strike")
+#             ax_d.set_xlabel("Strike K")
+#             ax_d.set_ylabel("Delta")
+#             st.pyplot(fig_d)
+
+#             # Plot Gamma
+#             fig_g, ax_g = plt.subplots(figsize=(6,4))
+#             ax_g.plot(K_grid, gamma_list)
+#             ax_g.set_title("Gamma vs Strike")
+#             ax_g.set_xlabel("Strike K")
+#             ax_g.set_ylabel("Gamma")
+#             st.pyplot(fig_g)
+
+#             # Plot Vega
+#             fig_v, ax_v = plt.subplots(figsize=(6,4))
+#             ax_v.plot(K_grid, vega_list)
+#             ax_v.set_title("Vega vs Strike")
+#             ax_v.set_xlabel("Strike K")
+#             ax_v.set_ylabel("Vega")
+#             st.pyplot(fig_v)
+
+#             # Plot Theta
+#             fig_t, ax_t = plt.subplots(figsize=(6,4))
+#             ax_t.plot(K_grid, theta_list)
+#             ax_t.set_title("Theta vs Strike")
+#             ax_t.set_xlabel("Strike K")
+#             ax_t.set_ylabel("Theta")
+#             st.pyplot(fig_t)
+
+#             # Plot Rho
+#             fig_r, ax_r = plt.subplots(figsize=(6,4))
+#             ax_r.plot(K_grid, rho_list)
+#             ax_r.set_title("Rho vs Strike")
+#             ax_r.set_xlabel("Strike K")
+#             ax_r.set_ylabel("Rho")
+#             st.pyplot(fig_r)
+
+#             # Export CSV
+#             df_greeks = pd.DataFrame({
+#                 "K": K_grid,
+#                 "Delta": delta_list,
+#                 "Gamma": gamma_list,
+#                 "Vega": vega_list,
+#                 "Theta": theta_list,
+#                 "Rho": rho_list
+#             })
+
+#             csv = df_greeks.to_csv(index=False).encode("utf-8")
+#             st.download_button(
+#                 label="Download Greeks vs Strike as CSV",
+#                 data=csv,
+#                 file_name="bs_greeks_vs_strike.csv",
+#                 mime="text/csv",
+#                 key="g_dl_greeks_csv"
+#             )
+
+#         except Exception as e:
+#             st.error(f"Error computing Greeks profiles: {e}")
+
+
+#     st.markdown("---")
+#     st.subheader("Gamma heatmap Γ(S, K)")
+
+#     # ===========================
+#     # 3) Heatmap Gamma(S,K)
+#     # ===========================
+#     colH1, colH2 = st.columns(2)
+
+#     with colH1:
+#         s_min_factor = st.number_input("Min spot factor (×S₀)", value=0.5, key="g_s_min_factor")
+#         s_max_factor = st.number_input("Max spot factor (×S₀)", value=1.5, key="g_s_max_factor")
+
+#     with colH2:
+#         grid_S = st.number_input("Grid size S dimension", value=30, min_value=10, max_value=100, key="g_s_grid")
+#         grid_K = st.number_input("Grid size K dimension", value=30, min_value=10, max_value=100, key="g_k_grid_heat")
+
+#     if st.button("Plot Gamma heatmap", key="g_btn_gamma_heat"):
+
+#         try:
+#             S_min = max(1e-6, s_min_factor * S)
+#             S_max = max(S_min + 1e-6, s_max_factor * S)
+#             K_min = max(1e-6, 0.5 * K)
+#             K_max = max(K_min + 1e-6, 1.5 * K)
+
+#             S_vals = np.linspace(S_min, S_max, int(grid_S))
+#             K_vals = np.linspace(K_min, K_max, int(grid_K))
+
+#             gamma_matrix = np.zeros((len(S_vals), len(K_vals)))
+
+#             for i, S_i in enumerate(S_vals):
+#                 for j, K_j in enumerate(K_vals):
+#                     gamma_matrix[i, j] = gamma(S_i, K_j, r, sigma, T)
+
+#             fig_h, ax_h = plt.subplots(figsize=(7,5))
+#             cax = ax_h.imshow(
+#                 gamma_matrix,
+#                 origin="lower",
+#                 aspect="auto",
+#                 extent=[K_vals[0], K_vals[-1], S_vals[0], S_vals[-1]]
+#             )
+#             ax_h.set_xlabel("Strike K")
+#             ax_h.set_ylabel("Spot S")
+#             ax_h.set_title("Gamma heatmap Γ(S, K)")
+#             fig_h.colorbar(cax, label="Gamma")
+#             st.pyplot(fig_h)
+
+#         except Exception as e:
+#             st.error(f"Error plotting Gamma heatmap: {e}")
+
+
+#     st.markdown("---")
+#     st.subheader("Heston Greeks (Monte Carlo bump)")
+
+#     # ===========================
+#     # 4) Heston MC Greeks
+#     # ===========================
+#     colHes1, colHes2 = st.columns(2)
+
+#     with colHes1:
+#         S0_h = st.number_input("Heston S₀", value=100.0, key="hg_S0")
+#         K_h = st.number_input("Heston Strike K", value=100.0, key="hg_K")
+#         T_h = st.number_input("Heston T (years)", value=1.0, key="hg_T")
+#         r_h = st.number_input("Heston r", value=0.04, key="hg_r")
+#         opt_type_h = st.radio("Heston option type", ["Call", "Put"], key="hg_opt_type")
+
+#     with colHes2:
+#         v0_h = st.number_input("Heston v₀", value=0.04, key="hg_v0")
+#         kappa_h = st.number_input("κ", value=1.5, key="hg_kappa")
+#         theta_h = st.number_input("θ", value=0.04, key="hg_theta")
+#         sigma_v_h = st.number_input("σᵥ", value=0.3, key="hg_sigma_v")
+#         rho_h = st.number_input("ρ", value=-0.7, key="hg_rho")
+#         n_steps_h = st.number_input("Time steps (Heston)", value=100, key="hg_steps")
+#         n_paths_h = st.number_input("MC paths (Heston)", value=5000, key="hg_paths")
+
+#     colBump1, colBump2 = st.columns(2)
+#     with colBump1:
+#         bump_S = st.number_input("Bump for S (ΔS)", value=1.0, key="hg_bump_S")
+#     with colBump2:
+#         bump_v = st.number_input("Bump for v₀ (Δv₀)", value=0.01, key="hg_bump_v")
+
+#     def heston_price_once(S0_local, v0_local):
+#         market_h = MarketData(spot=S0_local, r=r_h)
+#         market_h.T = float(T_h)
+#         market_h.v_0 = float(v0_local)
+#         market_h.kappa = float(kappa_h)
+#         market_h.theta = float(theta_h)
+#         market_h.sigma_v = float(sigma_v_h)
+#         market_h.rho = float(rho_h)
+#         market_h.n_steps = int(n_steps_h)
+#         market_h.n_paths = int(n_paths_h)
+
+#         if opt_type_h == "Call":
+#             opt_h = EuropeanCall(K_h, T_h)
+#         else:
+#             opt_h = EuropeanPut(K_h, T_h)
+
+#         model_h = HestonModel()
+#         price_h = model_h.price_european(opt_h, market_h)
+#         return price_h
+
+#     if st.button("Compute Heston MC Greeks", key="hg_btn"):
+
+#         try:
+#             # Prix de base
+#             P0 = heston_price_once(S0_h, v0_h)
+
+#             # Delta & Gamma via bump sur S
+#             P_up_S = heston_price_once(S0_h + bump_S, v0_h)
+#             P_dn_S = heston_price_once(S0_h - bump_S, v0_h)
+
+#             delta_h = (P_up_S - P_dn_S) / (2 * bump_S)
+#             gamma_h = (P_up_S - 2*P0 + P_dn_S) / (bump_S**2)
+
+#             # "Vega" Heston via bump sur v0
+#             P_up_v = heston_price_once(S0_h, v0_h + bump_v)
+#             P_dn_v = heston_price_once(S0_h, v0_h - bump_v)
+#             vega_h = (P_up_v - P_dn_v) / (2 * bump_v)
+
+#             st.success("Heston MC Greeks computed:")
+
+#             st.write(f"**Delta (MC, Heston):** {delta_h:.6f}")
+#             st.write(f"**Gamma (MC, Heston):** {gamma_h:.6f}")
+#             st.write(f"**Vega wrt v₀ (MC, Heston):** {vega_h:.6f}")
+
+#         except Exception as e:
+#             st.error(f"Error computing Heston MC Greeks: {e}")
