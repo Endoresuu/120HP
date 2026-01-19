@@ -15,7 +15,7 @@ from pricer.calibration.implied_vol import NewtonImpliedVolSolver
 from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+import pandas as pdgit 
 from datetime import datetime
 from mpl_toolkits.mplot3d import Axes3D  # nécessaire pour le 3D
 
