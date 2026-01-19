@@ -400,7 +400,7 @@ with tab_smile:
                 st.success("Smile computed successfully!")
                 st.dataframe(df)
 
-                fig = calibrator.plot_smile(return_fig=True)
+                fig = calibrator.plot_smile()
                 st.pyplot(fig)
 
         except Exception as e:
