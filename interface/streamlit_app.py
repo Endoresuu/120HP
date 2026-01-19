@@ -6,6 +6,7 @@ from pricer.market.data import MarketData
 from pricer.models.black_scholes import BlackScholesModel
 from pricer.models.heston import HestonModel
 from pricer.pricing.engine import PricingEngine
+from pricer.products.market_option import MarketOption
 from pricer.products.vanilla import EuropeanCall, EuropeanPut
 from pricer.calibration.market_calibrator import MarketSmileCalibrator
 from pricer.calibration.surface_calibrator import Calibrator
@@ -35,6 +36,63 @@ print(">>> USING ROOT_DIR =", ROOT_DIR)
 st.set_page_config(page_title="Option Pricer", page_icon="💰", layout="wide")
 
 st.markdown("<h1 style='text-align:center;'>Option Pricer 💰</h1>", unsafe_allow_html=True)
+
+# -------------------------
+#  HELPER
+# -------------------------
+
+from datetime import datetime
+
+def choose_next_expiry(chains):
+    """Retourne (expiry_str, days, T) pour la prochaine échéance future."""
+    if not chains:
+        return None, None, None
+
+    expiries = sorted(chains.keys())
+    today = datetime.today().date()
+
+    best_expiry, best_days = None, None
+    for e in expiries:
+        d = datetime.strptime(e, "%Y-%m-%d").date()
+        days = (d - today).days
+        if days <= 0:
+            continue
+        if best_days is None or days < best_days:
+            best_days = days
+            best_expiry = e
+
+    if best_expiry is None:
+        return None, None, None
+
+    return best_expiry, best_days, best_days / 365.0
+
+
+def choose_expiry_closest_to_T(chains, T_target):
+    """Retourne (expiry_str, days, T) pour l'échéance la plus proche de T_target."""
+    if not chains or T_target is None or T_target <= 0:
+        return None, None, None
+
+    expiries = sorted(chains.keys())
+    today = datetime.today().date()
+
+    best_expiry, best_days, best_diff = None, None, None
+
+    for e in expiries:
+        d = datetime.strptime(e, "%Y-%m-%d").date()
+        days = (d - today).days
+        if days <= 0:
+            continue
+        T = days / 365.0
+        diff = abs(T - T_target)
+        if best_diff is None or diff < best_diff:
+            best_diff = diff
+            best_expiry = e
+            best_days = days
+
+    if best_expiry is None:
+        return None, None, None
+
+    return best_expiry, best_days, best_days / 365.0
 
 # -------------------------
 #   TABS
@@ -197,7 +255,7 @@ with tab_price:
                 st.stop()
 
             solver = NewtonImpliedVolSolver()
-            opt_solver = SolverOption(S0=S0, K=K, T=T, r=r, price_mkt=market_price)
+            opt_solver = MarketOption(S0=S0, K=K, T=T, r=r, price_mkt=market_price)
             sigma = solver.solve(opt_solver)
 
             if sigma is None or not np.isfinite(sigma):
