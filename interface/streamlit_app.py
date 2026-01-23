@@ -129,8 +129,8 @@ def get_market_call_price_from_chain(chains, expiry, K):
 # -------------------------
 #   TABS
 # -------------------------
-tab_price, tab_smile, tab_surface, tab_heston, tab_greeks= st.tabs(
-    ["Pricer", "Volatility Smile", "Volatility Surface", "Heston Monte Carlo", "Greeks"]
+tab_price, tab_smile, tab_surface, tab_heston, tab_greeks, tab_linear, tab_replication, tab_swaps= st.tabs(
+    ["Pricer", "Volatility Smile", "Volatility Surface", "Heston Monte Carlo", "Greeks", "Linear","Replication", "Swaps"]
 )
 
 with tab_price:
@@ -304,61 +304,6 @@ with tab_price:
         price = engine.price_european(opt, kind=opt_type.lower())
         st.success(f"Option price: {price:.4f}")
 
-
-# with tab_price:
-
-    # ticker = st.text_input("Ticker", value="SPY", key="prc_ticker")
-
-    # if ticker:
-    #     try:
-    #         S0_default = float(get_close_price(ticker).iloc[-1])
-    #         st.success(f"Current spot: {S0_default}")
-    #     except:
-    #         st.error("Invalid ticker")
-    #         S0_default = 100.0
-
-    # opt_type = st.radio("Option type", ["Call", "Put"], key="prc_opt_type")
-
-    # col1, col2 = st.columns(2)
-
-    # with col1:
-    #     K = st.number_input("Strike K", key="prc_K")
-    #     T = st.number_input("Maturity T (years)", key="prc_T")
-
-    # with col2:
-    #     S0 = st.number_input("Spot", value=S0_default, key="prc_S0")
-    #     r = st.number_input("Risk-free rate r", value=0.04, key="prc_r")
-
-    # vol_method = st.radio("Volatility method", ["Manual", "Implied (Newton)"], key="prc_vol_method")
-
-    # if vol_method == "Manual":
-    #     sigma = st.number_input("Sigma", 0.20, key="prc_sigma")
-
-    # else:
-    #     market_price = st.number_input("Market price (for IV)", key="prc_mkt_price")
-    #     sigma = None  # sera calculée plus bas
-
-    # if st.button("Calculate price", key="prc_btn"):
-
-    #     market = MarketData(spot=S0, r=r, q=0.0)
-
-    #     # Si volatilité implicite demandée
-    #     if vol_method == "Implied (Newton)":
-    #         try:
-    #             solver = NewtonImpliedVolSolver()
-    #             opt_tmp = EuropeanCall(K, T) if opt_type == "Call" else EuropeanPut(K, T)
-    #             sigma = solver.solve_market_price(opt_tmp, market, market_price)
-    #             st.info(f"Implied Volatility: {sigma:.4f}")
-    #         except:
-    #             st.error("Could not compute implied volatility.")
-    #             st.stop()
-
-    #     model = BlackScholesModel(market_data=market, sigma=sigma)
-    #     opt = EuropeanCall(K, T) if opt_type == "Call" else EuropeanPut(K, T)
-    #     engine = PricingEngine(model)
-
-    #     price = engine.price_european(opt, kind=opt_type.lower())
-    #     st.success(f"BS Price: {price:.4f}")
 
 with tab_heston:
 
@@ -840,3 +785,313 @@ with tab_greeks:
 
         except Exception as e:
             st.error(f"Error computing Heston MC Greeks: {e}")
+
+
+with tab_linear:
+
+    st.header("Forwards & Futures")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        S0 = st.number_input("Spot S₀", value=100.0, key="lin_S0")
+        r = st.number_input("Risk-free rate r", value=0.04, key="lin_r")
+        q = st.number_input("Dividend yield q", value=0.0, key="lin_q")
+        T = st.number_input("Maturity T (years)", value=1.0, key="lin_T")
+
+    with col2:
+        product_type = st.radio(
+            "Product type",
+            ["Forward", "Future"],
+            key="lin_type"
+        )
+        K = st.number_input(
+            "Delivery price K (Forward only)",
+            value=100.0,
+            disabled=(product_type == "Future"),
+            key="lin_K"
+        )
+
+    if st.button("Price linear product", key="lin_btn"):
+
+        if product_type == "Forward":
+            from pricer.products.forward import Forward
+            fwd = Forward(K=K, T=T)
+            F0 = fwd.forward_price(S0, r, q)
+            V0 = fwd.value(S0, r, q)
+
+            st.success(f"Forward price F₀ = {F0:.4f}")
+            st.info(f"Forward value V₀ = {V0:.4f}")
+
+        else:
+            from pricer.products.future import Future
+            fut = Future(T=T)
+            F0 = fut.future_price(S0, r, q)
+
+            st.success(f"Future price = {F0:.4f}")
+            st.info("Under constant rates, Future = Forward")
+
+with tab_replication:
+
+    st.header("Replication & Hedging playground (Black–Scholes)")
+
+    # ----------------------------
+    # Inputs
+    # ----------------------------
+    col1, col2 = st.columns(2)
+
+    with col1:
+        S0 = st.number_input("Spot S₀", value=100.0, key="rep_S0")
+        K  = st.number_input("Strike K", value=100.0, key="rep_K")
+        T  = st.number_input("Maturity T (years)", value=1.0, min_value=1e-4, key="rep_T")
+        opt_type = st.radio("Option", ["Call", "Put"], key="rep_type")
+
+    with col2:
+        r = st.number_input("Risk-free rate r", value=0.04, key="rep_r")
+        sigma = st.number_input("Volatility σ", value=0.20, min_value=1e-4, key="rep_sigma")
+        q = st.number_input("Dividend yield q (optional)", value=0.0, key="rep_q")  # si tu ne gères pas q, laisse 0
+
+    st.markdown("---")
+
+    # ----------------------------
+    # Choose "hedge spot" (where delta is computed)
+    # ----------------------------
+    st.subheader("Static replication (one delta computed at a chosen spot)")
+
+    hedge_spot_mode = st.radio(
+        "Delta computed at:",
+        ["Current spot S₀", "Custom spot"],
+        key="rep_hedge_spot_mode"
+    )
+
+    if hedge_spot_mode == "Current spot S₀":
+        S_hedge = float(S0)
+        st.info(f"Delta will be computed at S = {S_hedge:.4f}")
+    else:
+        S_hedge = st.number_input("Custom hedge spot", value=float(S0), min_value=1e-8, key="rep_Shedge")
+
+    # ----------------------------
+    # Compute option price & delta (use your engine for consistency)
+    # ----------------------------
+    # Build market & option
+    market = MarketData(spot=S0, r=r, q=q) if "q" in MarketData.__init__.__code__.co_varnames else MarketData(spot=S0, r=r)
+
+    option = EuropeanCall(K, T) if opt_type == "Call" else EuropeanPut(K, T)
+
+    model = BlackScholesModel(market_data=market, sigma=sigma)
+    engine = PricingEngine(model=model)
+
+    # Option price today
+    price0 = engine.price_european(option, kind=opt_type.lower())
+
+    # Delta at hedge spot (use your greeks functions if you have them)
+    # NOTE: I assume your greek signature is delta_call(S, K, r, sigma, T)
+    if opt_type == "Call":
+        delta0 = float(delta_call(S_hedge, K, r, sigma, T))
+    else:
+        delta0 = float(delta_put(S_hedge, K, r, sigma, T))
+
+    # Build the static replicating portfolio:
+    # Hold Δ shares and a cash position B so that:
+    #   V0 = Δ*S_hedge + B = option_price0
+    # => B = option_price0 - Δ*S_hedge
+    B0 = price0 - delta0 * S_hedge
+
+    # Terminal value of the portfolio at maturity (cash grows at r):
+    #   V_T = Δ*S_T + B0*exp(rT)
+    # (ignoring q in the cash account; for a student project, this is fine)
+    # If you want to be “extra correct” with dividends, we can refine, but keep it simple.
+
+    # ----------------------------
+    # Display key numbers
+    # ----------------------------
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Option price (t=0)", f"{price0:.6f}")
+    c2.metric("Delta used (static)", f"{delta0:.6f}")
+    c3.metric("Cash position B₀", f"{B0:.6f}")
+
+    st.caption(
+        "Static replication means you hedge once with Δ at the chosen spot. "
+        "It will *not* match the payoff globally because the option is convex (Gamma)."
+    )
+
+    # ----------------------------
+    # Payoff plot at maturity
+    # ----------------------------
+    st.subheader("Payoff comparison at maturity")
+
+    s_min = st.number_input("Min S_T (plot)", value=0.5 * S0, min_value=1e-8, key="rep_smin")
+    s_max = st.number_input("Max S_T (plot)", value=1.5 * S0, min_value=1e-8, key="rep_smax")
+    n_pts = st.slider("Grid points", min_value=100, max_value=2000, value=400, key="rep_npts")
+
+    S_grid = np.linspace(float(s_min), float(s_max), int(n_pts))
+
+    if opt_type == "Call":
+        payoff_opt = np.maximum(S_grid - K, 0.0)
+    else:
+        payoff_opt = np.maximum(K - S_grid, 0.0)
+
+    payoff_rep = delta0 * S_grid + B0 * np.exp(r * T)
+    err = payoff_rep - payoff_opt
+
+    import matplotlib.pyplot as plt
+
+    fig1, ax1 = plt.subplots(figsize=(7, 4))
+    ax1.plot(S_grid, payoff_opt, label="Option payoff")
+    ax1.plot(S_grid, payoff_rep, label="Static replication: Δ·S_T + B·e^{rT}")
+    ax1.axvline(S_hedge, linestyle="--")
+    ax1.set_xlabel("Underlying at maturity S_T")
+    ax1.set_ylabel("Payoff / Terminal value")
+    ax1.set_title("Option vs Static Replication (one-shot delta)")
+    ax1.grid(True)
+    ax1.legend()
+    st.pyplot(fig1)
+
+    fig2, ax2 = plt.subplots(figsize=(7, 3.5))
+    ax2.plot(S_grid, err)
+    ax2.axhline(0.0)
+    ax2.axvline(S_hedge, linestyle="--")
+    ax2.set_xlabel("S_T")
+    ax2.set_ylabel("Replication error (Rep - Option)")
+    ax2.set_title("Replication error (convexity / gamma effect)")
+    ax2.grid(True)
+    st.pyplot(fig2)
+
+    st.markdown("---")
+
+    # ==========================================================
+    # Discrete delta-hedging simulation (more “quant”, still simple)
+    # ==========================================================
+    st.subheader("Discrete delta hedging simulation (BS)")
+
+    with st.expander("Run a discrete hedging simulation (recommended)", expanded=True):
+
+        colh1, colh2 = st.columns(2)
+        with colh1:
+            n_steps = st.number_input("Re-hedge steps (N)", value=50, min_value=1, max_value=2000, key="rep_N")
+            n_paths = st.number_input("Simulation paths", value=2000, min_value=200, max_value=50000, key="rep_paths")
+        with colh2:
+            seed = st.number_input("Random seed", value=123, min_value=0, max_value=10_000_000, key="rep_seed")
+            use_same_delta_spot = st.checkbox("Initial hedge at S₀ (ignore custom hedge spot here)", value=True, key="rep_useS0")
+
+        if st.button("Run hedging simulation", key="rep_run_hedge"):
+
+            try:
+                np.random.seed(int(seed))
+
+                N = int(n_steps)
+                M = int(n_paths)
+                dt = T / N
+
+                # Simulate GBM under risk-neutral dynamics (ignoring q for simplicity)
+                Z = np.random.normal(size=(M, N))
+                S = np.zeros((M, N + 1))
+                S[:, 0] = S0
+
+                for t in range(N):
+                    S[:, t+1] = S[:, t] * np.exp((r - 0.5 * sigma**2) * dt + sigma * np.sqrt(dt) * Z[:, t])
+
+                # Initial option price at t=0 (true model price)
+                price_init = float(price0)
+
+                # Initialize hedge portfolio:
+                # choose initial spot for delta
+                S_init_delta = float(S0) if use_same_delta_spot else float(S_hedge)
+
+                if opt_type == "Call":
+                    delta_init = np.array(delta_call(S_init_delta, K, r, sigma, T), ndmin=1).astype(float)[0]
+                else:
+                    delta_init = np.array(delta_put(S_init_delta, K, r, sigma, T), ndmin=1).astype(float)[0]
+
+                # Portfolio holds delta shares + cash
+                cash = price_init - delta_init * S0  # replicate at t=0
+                delta_pos = np.full(M, delta_init, dtype=float)
+
+                # Re-hedge through time
+                for t in range(N):
+                    # cash accrues
+                    cash *= np.exp(r * dt)
+
+                    # compute new delta at current time (time to maturity decreases)
+                    tau = max(T - (t+1) * dt, 1e-12)
+                    S_t = S[:, t+1]
+
+                    if opt_type == "Call":
+                        new_delta = np.array(delta_call(S_t, K, r, sigma, tau), dtype=float)
+                    else:
+                        new_delta = np.array(delta_put(S_t, K, r, sigma, tau), dtype=float)
+
+                    # adjust shares: buy/sell (delta changes)
+                    d_delta = new_delta - delta_pos
+                    cash -= d_delta * S_t
+                    delta_pos = new_delta
+
+                # Terminal portfolio value
+                V_T = delta_pos * S[:, -1] + cash
+
+                # Terminal option payoff
+                if opt_type == "Call":
+                    payoff_T = np.maximum(S[:, -1] - K, 0.0)
+                else:
+                    payoff_T = np.maximum(K - S[:, -1], 0.0)
+
+                hedge_error = V_T - payoff_T
+
+                st.success("Simulation done")
+
+                cA, cB, cC = st.columns(3)
+                cA.metric("Mean hedging error", f"{hedge_error.mean():.6f}")
+                cB.metric("Std hedging error", f"{hedge_error.std(ddof=1):.6f}")
+                cC.metric("95% quantile |error|", f"{np.quantile(np.abs(hedge_error), 0.95):.6f}")
+
+                # Histogram
+                fig3, ax3 = plt.subplots(figsize=(7, 3.8))
+                ax3.hist(hedge_error, bins=50)
+                ax3.set_title("Discrete hedging error distribution (V_T - payoff)")
+                ax3.set_xlabel("Hedging error")
+                ax3.set_ylabel("Frequency")
+                ax3.grid(True)
+                st.pyplot(fig3)
+
+                # Optional download
+                df_out = pd.DataFrame({"hedging_error": hedge_error})
+                st.download_button(
+                    "Download hedging errors (CSV)",
+                    data=df_out.to_csv(index=False).encode("utf-8"),
+                    file_name="hedging_errors.csv",
+                    mime="text/csv",
+                    key="rep_dl_err"
+                )
+
+            except Exception as e:
+                st.error(f"Hedging simulation error: {e}")
+with tab_swaps:
+
+    st.header("Interest Rate Swap (Fixed vs Floating)")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        r = st.number_input("Flat interest rate r", value=0.03, key="swap_r")
+        T = st.number_input("Maturity T (years)", value=5.0, key="swap_T")
+        fixed_rate = st.number_input("Fixed rate K", value=0.03, key="swap_K")
+
+    with col2:
+        notional = st.number_input("Notional", value=1.0, key="swap_N")
+        freq = st.selectbox("Payment frequency", [1, 2, 4], index=0, key="swap_freq")
+        payer = st.radio("Position", ["Payer (pay fixed)", "Receiver (receive fixed)"], key="swap_pos")
+
+    if st.button("Price swap", key="swap_btn"):
+
+        swap = InterestRateSwap(
+            fixed_rate=fixed_rate,
+            maturity=T,
+            freq=freq,
+            notional=notional
+        )
+
+        par_rate = swap.par_rate(r)
+        value = swap.value(r, payer=(payer.startswith("Payer")))
+
+        st.success(f"Par swap rate: {par_rate:.6f}")
+        st.info(f"Swap present value: {value:.6f}")
