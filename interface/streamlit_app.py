@@ -1,6 +1,6 @@
 
 # python3 -m streamlit run interface/streamlit_app.py
-
+# yfinance matplotlib scipy plotly
 import streamlit as st
 from pricer.market.data import MarketData
 from pricer.models.black_scholes import BlackScholesModel

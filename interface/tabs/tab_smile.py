@@ -1,30 +1,9 @@
 import streamlit as st
-from pricer.market.data import MarketData
-from pricer.models.black_scholes import BlackScholesModel
-from pricer.models.heston import HestonModel
-from pricer.pricing.engine import PricingEngine
-from pricer.products.market_option import MarketOption
-from pricer.products.vanilla import EuropeanCall, EuropeanPut
-from pricer.calibration.market_calibrator import MarketSmileCalibrator
-from pricer.calibration.surface_calibrator import Calibrator
-from pricer.market.import_data import get_option_chain, get_close_price
-from pricer.calibration.implied_vol import NewtonImpliedVolSolver
-from datetime import datetime
-import matplotlib.pyplot as plt
-import plotly.graph_objects as go
-import numpy as np
 import pandas as pd
-from datetime import datetime
-from mpl_toolkits.mplot3d import Axes3D  # nécessaire pour le 3D
+import matplotlib.pyplot as plt
 
+from pricer.calibration.market_calibrator import MarketSmileCalibrator
 
-import os
-import sys
-from interface.utils.market_helpers import (
-    choose_next_expiry,
-    choose_expiry_closest_to_T,
-    get_market_call_price_from_chain
-)
 
 def render():
     st.subheader("Volatility Smile")
@@ -38,14 +17,23 @@ def render():
             calibrator = MarketSmileCalibrator(ticker_s, r=r_s)
             df = calibrator.compute_smile()
 
-            if df.empty:
+            if df is None or df.empty:
                 st.warning("No valid options found.")
-            else:
-                st.success("Smile computed successfully!")
-                st.dataframe(df)
+                return
 
-                fig = calibrator.plot_smile()
-                st.pyplot(fig)
+            st.success("Smile computed successfully!")
+            st.dataframe(df, use_container_width=True)
+
+            fig = calibrator.plot_smile()
+            st.pyplot(fig)
+
+            csv = df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "Download smile as CSV",
+                csv,
+                file_name="volatility_smile.csv",
+                mime="text/csv"
+            )
 
         except Exception as e:
             st.error(f"Error computing smile: {e}")

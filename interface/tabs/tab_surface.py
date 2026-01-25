@@ -1,30 +1,17 @@
 import streamlit as st
-from pricer.market.data import MarketData
-from pricer.models.black_scholes import BlackScholesModel
-from pricer.models.heston import HestonModel
-from pricer.pricing.engine import PricingEngine
-from pricer.products.market_option import MarketOption
-from pricer.products.vanilla import EuropeanCall, EuropeanPut
-from pricer.calibration.market_calibrator import MarketSmileCalibrator
-from pricer.calibration.surface_calibrator import Calibrator
-from pricer.market.import_data import get_option_chain, get_close_price
-from pricer.calibration.implied_vol import NewtonImpliedVolSolver
-from datetime import datetime
-import matplotlib.pyplot as plt
-import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+
 from datetime import datetime
-from mpl_toolkits.mplot3d import Axes3D  # nécessaire pour le 3D
 
-
-import os
-import sys
-from interface.utils.market_helpers import (
-    choose_next_expiry,
-    choose_expiry_closest_to_T,
-    get_market_call_price_from_chain
+from pricer.market.import_data import (
+    get_option_chain,
+    get_close_price
 )
+
+from pricer.calibration.surface_calibrator import Calibrator
 
 def render():
     st.subheader("Volatility Surface (2D)")
@@ -40,38 +27,59 @@ def render():
 
     @st.cache_data(show_spinner=False)
     def get_calibrated_surface(ticker_sf, n_mat, r_val):
-        # --- Fetch Data ---
         chains = get_option_chain(ticker_sf)
         S0 = float(get_close_price(ticker_sf).iloc[-1])
-        expiries = sorted(chains.keys())[:n_mat]
 
-        maturities_list = []
-        for e in expiries:
-            T = (datetime.strptime(e, "%Y-%m-%d") - datetime.today()).days / 365.0
-            maturities_list.append(T)
+        today = datetime.today()
 
-        maturities = np.array(maturities_list)
-        all_strikes = sorted(set().union(*[set(chains[e]["strike"]) for e in expiries]))
-        strikes = np.array(all_strikes, dtype=float)
+        expiries = []
+        maturities = []
 
-        # --- Build Matrix ---
-        price_matrix = np.zeros((len(maturities), len(strikes))) * np.nan
+        for e in sorted(chains.keys()):
+            T = (datetime.strptime(e, "%Y-%m-%d") - today).days / 365.0
+            if T > 0:
+                expiries.append(e)
+                maturities.append(T)
+            if len(expiries) == n_mat:
+                break
+
+        maturities = np.array(maturities)
+
+        # strikes communs
+        strikes = sorted(set().union(*[set(chains[e]["strike"]) for e in expiries]))
+        strikes = np.array(strikes, dtype=float)
+
+        # matrice de PRIX
+        price_matrix = np.full((len(maturities), len(strikes)), np.nan)
+
         for i, e in enumerate(expiries):
             df = chains[e].set_index("strike")
             for j, K in enumerate(strikes):
                 if K in df.index:
                     price_matrix[i, j] = float(df.loc[K]["lastPrice"])
 
+        # on enlève les strikes complètement vides
         valid_cols = ~np.isnan(price_matrix).all(axis=0)
         strikes = strikes[valid_cols]
         price_matrix = price_matrix[:, valid_cols]
 
-        # --- Calibration ---
-        cal = Calibrator(strikes=strikes, maturities=maturities, S0=S0, r=r_val, price_matrix=price_matrix)
+        # calibration
+        cal = Calibrator(
+            strikes=strikes,
+            maturities=maturities,
+            S0=S0,
+            r=r_val,
+            price_matrix=price_matrix
+        )
+
         vol_surface = cal.build_surface()
 
-        df_raw = pd.DataFrame(vol_surface.surface, index=maturities, columns=strikes)
-        # On retourne un tuple complet
+        df_raw = pd.DataFrame(
+            vol_surface.surface,
+            index=maturities,
+            columns=strikes
+        )
+
         return df_raw, strikes, maturities, S0
 
     # LOGIQUE DE BOUTON ET SESSION
@@ -90,12 +98,17 @@ def render():
 
             # --- Interpolation ---
             if interp_method == "Bilinear (2D interpolation)":
-                df_interp = df_raw.interpolate(axis=1, limit_direction="both").interpolate(axis=0, limit_direction="both")
+                df_interp = (df_raw.dropna(how="all", axis=0).dropna(how="all", 
+                axis=1).interpolate(axis=1, limit_direction="both").interpolate(axis=0, 
+                limit_direction="both"))
             else:
                 df_interp = df_raw.copy()
 
             st.subheader("Results")
             st.write(f"Spot Price S0: {S0:.2f}")
+
+            st.caption( "Surface built from market option prices via implied volatility inversion "
+            "and interpolated across strikes and maturities.")
 
             # --- 3D Surface ---
             K_grid, T_grid = np.meshgrid(df_interp.columns, df_interp.index)

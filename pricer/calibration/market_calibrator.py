@@ -139,14 +139,16 @@ class MarketSmileCalibrator:
 
     def plot_smile(self):
         if self.df_result is None or self.df_result.empty:
-            raise RuntimeError("Aucun résultat pour tracer le smile.")
+            raise RuntimeError("No smile data to plot.")
 
         fig, ax = plt.subplots(figsize=(8, 5))
         ax.plot(self.df_result["strike"], self.df_result["iv"], marker="o")
-        ax.grid(True)
         ax.set_xlabel("Strike")
-        ax.set_ylabel("Vol implicite")
-        ax.set_title(f"Smile – {self.ticker} – {self.expiry}")
+        ax.set_ylabel("Implied volatility")
+        ax.set_title(f"Volatility Smile – {self.ticker} – {self.expiry}")
+        ax.grid(True)
 
         return fig
+
+
 
