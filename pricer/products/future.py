@@ -1,23 +1,26 @@
 import numpy as np
 
-class Forward:
+import numpy as np
+
+class Future:
     """
-    Forward contract on an underlying.
+    Future contract on an underlying.
+    Under constant interest rates and no convexity adjustment,
+    the future price equals the forward price.
     """
 
-    def __init__(self, K: float, T: float):
-        self.K = K
+    def __init__(self, T: float):
         self.T = T
 
-    def forward_price(self, spot: float, r: float, q: float = 0.0):
+    def future_price(self, spot: float, r: float, q: float = 0.0):
         """
-        Forward price F0
+        Future price F₀
         """
         return spot * np.exp((r - q) * self.T)
 
     def value(self, spot: float, r: float, q: float = 0.0):
         """
-        Present value of the forward contract
+        Present value of the future contract.
+        For a future, initial value is zero by construction.
         """
-        F0 = self.forward_price(spot, r, q)
-        return np.exp(-r * self.T) * (F0 - self.K)
+        return 0.0

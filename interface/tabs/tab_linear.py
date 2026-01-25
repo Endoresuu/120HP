@@ -1,44 +1,7 @@
 import streamlit as st
-
 from pricer.products.forward import Forward
 
 def render():
-    st.header("Forwards & Futures")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        S0 = st.number_input("Spot S₀", value=100.0)
-        r = st.number_input("Risk-free rate r", value=0.04)
-        q = st.number_input("Dividend yield q", value=0.0)
-        T = st.number_input("Maturity T (years)", value=1.0)
-
-    with col2:
-        product_type = st.radio(
-            "Product type",
-            ["Forward", "Future"]
-        )
-
-        K = st.number_input(
-            "Delivery price K",
-            value=100.0,
-            disabled=(product_type == "Future")
-        )
-
-    if st.button("Price linear product"):
-
-        fwd = Forward(K=K, T=T)
-        F0 = fwd.forward_price(S0, r, q)
-        V0 = fwd.value(S0, r, q)
-
-        if product_type == "Forward":
-            st.success(f"Forward price F₀ = {F0:.4f}")
-            st.info(f"Forward value V₀ = {V0:.4f}")
-
-        else:
-            st.success(f"Future price = {F0:.4f}")
-            st.info("Under constant rates, Future = Forward (no convexity adjustment)")
-
     st.header("Forwards & Futures")
     st.caption("Pricing of linear products under no-arbitrage assumptions")
 
