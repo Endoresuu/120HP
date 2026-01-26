@@ -1,6 +1,6 @@
 class MarketOption:
     """
-    Option contenant les paramètres nécessaires pour le calcul de volatilité implicite.
+    Option containing the parameters necessary for the calculation of implied volatility.
     """
     def __init__(self, S0, K, T, r, price_mkt):
         self.S0 = S0

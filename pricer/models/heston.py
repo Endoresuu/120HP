@@ -16,10 +16,21 @@ from pricer.products.base import Option
 
 class HestonModel:
     """
-    Modèle de Heston – simulation Euler + pricing Monte Carlo
-    Le modèle est indépendant de l'option.
-    """
+    Implementation of the Heston Stochastic Volatility model using Monte Carlo simulation.
 
+    The model describes the joint evolution of an asset price and its variance:
+    - The price follows a geometric Brownian motion with stochastic variance.
+    - The variance follows a Cox-Ingersoll-Ross (CIR) mean-reverting process.
+
+    Attributes:
+        kappa (float): Mean-reversion speed of the variance.
+        theta (float): Long-term mean (level) of the variance.
+        sigma_v (float): Volatility of the variance (vol-of-vol).
+        rho (float): Correlation between the asset price shocks and variance shocks.
+        v0 (float): Initial variance at t=0.
+        n_steps (int): Number of time steps for the discretization.
+        n_paths (int): Number of simulated Monte Carlo trajectories.
+    """
     def __init__(
         self,
         kappa=2.0,
@@ -30,6 +41,9 @@ class HestonModel:
         n_steps=252,
         n_paths=50000
     ):
+        """
+        Initializes the Heston model with stochastic parameters and simulation settings.
+        """
         self.kappa = kappa
         self.theta = theta
         self.sigma_v = sigma_v
@@ -39,6 +53,20 @@ class HestonModel:
         self.n_paths = int(n_paths)
 
     def simulate_paths(self, market: MarketData, T: float):
+        """
+        Simulates asset price paths using the Heston dynamics.
+
+        The simulation uses a full truncation scheme to handle the possibility of
+        negative variance during the discretization process: v_t = max(v_t, 0).
+
+        Args:
+            market (MarketData): Container for spot price and risk-free rate.
+            T (float): Time to maturity (horizon of the simulation).
+
+        Returns:
+            np.ndarray: A 2D array of shape (n_paths, n_steps + 1) containing
+                        the simulated price trajectories.
+        """
         dt = T / self.n_steps
 
         S = np.zeros((self.n_paths, self.n_steps + 1))
@@ -73,6 +101,20 @@ class HestonModel:
         return S
 
     def price_european(self, option: Option, market: MarketData):
+        """
+        Prices a European option using the Monte Carlo method.
+
+        The price is calculated as the discounted expected payoff under the
+        risk-neutral measure:
+        Price = exp(-r * T) * E[Payoff(S_T)]
+
+        Args:
+            option (Option): An object with a .payoff() method and .T (maturity).
+            market (MarketData): The current market environment.
+
+        Returns:
+            float: The estimated European option price.
+        """
         S = self.simulate_paths(market, option.T)
         ST = S[:, -1]
 

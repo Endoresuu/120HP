@@ -10,7 +10,7 @@ from pricer.market.import_data import get_option_chain, get_close_price
 
 class MarketSmileCalibrator:
     """
-    Calibrateur du smile de volatilité implicite pour une seule maturité.
+    Calibrator of the implied volatility smile for a single maturity.
     """
 
     def __init__(self, ticker, r=0.04,
@@ -18,7 +18,9 @@ class MarketSmileCalibrator:
                  min_price=0.10,
                  moneyness_cutoff=0.5,
                  tol_rel_increase=0.25):
-        
+        """
+        Initializes the calibrator with market filtering and maturity selection rules.
+        """
         self.ticker = ticker
         self.r = r
         self.min_days = min_maturity_days
@@ -39,6 +41,15 @@ class MarketSmileCalibrator:
     # 1. Télécharger et préparer les données
     # -----------------------------------------------------------
     def load_market_data(self):
+        """
+        Downloads option chains and stock price, selecting the nearest valid maturity.
+
+        The method scans available expiration dates and selects the first one
+        falling within the [min_days, max_days] window.
+
+        Raises:
+            RuntimeError: If no maturity is found within the specified day range.
+        """
         chains = get_option_chain(self.ticker)
         self.S0 = float(get_close_price(self.ticker).iloc[-1])
 
@@ -65,7 +76,19 @@ class MarketSmileCalibrator:
     # 2. Calcul du smile
     # -----------------------------------------------------------
     def compute_smile(self):
+        """
+        Processes the option chain to compute implied volatilities for valid strikes.
 
+        This method performs several data cleaning steps:
+        1. Filters out zero-volume or illiquid options.
+        2. Validates Bid/Ask consistency.
+        3. Enforces the Lower Arbitrage Bound (C_mkt >= S0 - K*exp(-rT)).
+        4. Removes strikes that violate the monotonicity of call prices.
+        5. Solves for IV using the NewtonImpliedVolSolver.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing 'strike' and 'iv' columns.
+        """
         if self.df_calls is None:
             self.load_market_data()
 
@@ -138,6 +161,15 @@ class MarketSmileCalibrator:
     # -----------------------------------------------------------
 
     def plot_smile(self):
+        """
+        Generates a visualization of the volatility smile.
+
+        Returns:
+            matplotlib.figure.Figure: The figure object showing IV vs Strike.
+
+        Raises:
+            RuntimeError: If called before compute_smile() or if no data is available.
+        """
         if self.df_result is None or self.df_result.empty:
             raise RuntimeError("No smile data to plot.")
 
@@ -149,6 +181,3 @@ class MarketSmileCalibrator:
         ax.grid(True)
 
         return fig
-
-
-
