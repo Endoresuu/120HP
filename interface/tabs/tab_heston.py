@@ -6,8 +6,41 @@ from pricer.market.data import MarketData
 from pricer.models.heston import HestonModel
 from pricer.products.vanilla import EuropeanCall, EuropeanPut
 
-def render():
+# --- FONCTIONS DE CALCUL CACHÉES ---
 
+@st.cache_data
+def run_heston_simulation_cached(S0, r, T, K, opt_type, v0, kappa, theta, sigma_v, rho, n_steps, n_paths):
+    """
+    Effectue le calcul du prix et génère les trajectoires.
+    On regroupe les deux pour s'assurer de la cohérence des données.
+    """
+    # ---- Market ----
+    market = MarketData(spot=float(S0), r=float(r))
+
+    # ---- Option ----
+    option = EuropeanCall(K, T) if opt_type == "Call" else EuropeanPut(K, T)
+
+    # ---- Model ----
+    heston = HestonModel(
+        kappa=kappa,
+        theta=theta,
+        sigma_v=sigma_v,
+        rho=rho,
+        v0=v0,
+        n_steps=int(n_steps),
+        n_paths=int(n_paths)
+    )
+
+    # ---- Pricing & Paths ----
+    price = heston.price_european(option, market)
+    paths = heston.simulate_paths(market, T)
+
+    # On ne retourne qu'une seule trajectoire pour le graphique afin d'alléger le cache
+    return price, paths[0]
+
+# --- FONCTION DE RENDU ---
+
+def render():
     st.subheader("Heston Monte Carlo")
 
     col1, col2 = st.columns(2)
@@ -30,41 +63,33 @@ def render():
 
     show_path = st.checkbox("Show one simulated path", value=True, key="h_show_path")
 
+    # BOUTON DE CALCUL
     if st.button("Run Heston Monte Carlo", key="h_run"):
+        with st.status("Running Monte Carlo Simulation...", expanded=True) as status:
+            try:
+                price, sample_path = run_heston_simulation_cached(
+                    S0, r, T, K, opt_type, v0, kappa, theta, sigma_v, rho, n_steps, n_paths
+                )
+                # Stockage dans la session
+                st.session_state.heston_data = {
+                    "price": price,
+                    "sample_path": sample_path
+                }
+                status.update(label="Simulation Complete!", state="complete", expanded=False)
+            except Exception as e:
+                st.error(f"Heston Monte Carlo error: {e}")
 
-        try:
-            # ---- Market ----
-            market = MarketData(spot=float(S0), r=float(r))
+    # AFFICHAGE DES RÉSULTATS
+    if 'heston_data' in st.session_state:
+        data = st.session_state.heston_data
 
-            # ---- Option ----
-            option = EuropeanCall(K, T) if opt_type == "Call" else EuropeanPut(K, T)
+        st.success(f"Heston MC price = {data['price']:.6f}")
 
-            # ---- Model ----
-            heston = HestonModel(
-                kappa=kappa,
-                theta=theta,
-                sigma_v=sigma_v,
-                rho=rho,
-                v0=v0,
-                n_steps=int(n_steps),
-                n_paths=int(n_paths)
-            )
-
-            # ---- Pricing ----
-            price = heston.price_european(option, market)
-            st.success(f"Heston MC price = {price:.6f}")
-
-            # ---- Plot ONE path only (optional) ----
-            if show_path:
-                S_paths = heston.simulate_paths(market, T)
-
-                fig, ax = plt.subplots(figsize=(7, 3.5))
-                ax.plot(S_paths[0])
-                ax.set_title("Sample Heston path (Spot)")
-                ax.set_xlabel("Time step")
-                ax.set_ylabel("S")
-                ax.grid(True)
-                st.pyplot(fig)
-
-        except Exception as e:
-            st.error(f"Heston Monte Carlo error: {e}")
+        if show_path:
+            fig, ax = plt.subplots(figsize=(7, 3.5))
+            ax.plot(data['sample_path'])
+            ax.set_title("Sample Heston path (Spot)")
+            ax.set_xlabel("Time step")
+            ax.set_ylabel("S")
+            ax.grid(True)
+            st.pyplot(fig)

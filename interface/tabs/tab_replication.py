@@ -100,26 +100,31 @@ def render():
     payoff_rep = delta0 * S_grid + B0 * np.exp(r * T)
     err = payoff_rep - payoff_opt
 
-    fig1, ax1 = plt.subplots(figsize=(7, 4))
-    ax1.plot(S_grid, payoff_opt, label="Option payoff")
-    ax1.plot(S_grid, payoff_rep, label="Static replication: Δ·S_T + B·e^{rT}")
-    ax1.axvline(S_hedge, linestyle="--")
-    ax1.set_xlabel("Underlying at maturity S_T")
-    ax1.set_ylabel("Payoff / Terminal value")
-    ax1.set_title("Option vs Static Replication (one-shot delta)")
-    ax1.grid(True)
-    ax1.legend()
-    st.pyplot(fig1)
+    col1, col2 = st.columns(2)
 
-    fig2, ax2 = plt.subplots(figsize=(7, 3.5))
-    ax2.plot(S_grid, err)
-    ax2.axhline(0.0)
-    ax2.axvline(S_hedge, linestyle="--")
-    ax2.set_xlabel("S_T")
-    ax2.set_ylabel("Replication error (Rep - Option)")
-    ax2.set_title("Replication error (convexity / gamma effect)")
-    ax2.grid(True)
-    st.pyplot(fig2)
+    with col1:
+        # On peut réduire un peu le figsize pour que ça rentre bien
+        fig1, ax1 = plt.subplots(figsize=(6, 4))
+        ax1.plot(S_grid, payoff_opt, label="Option payoff")
+        ax1.plot(S_grid, payoff_rep, label="Static replication: Δ·S_T + B·e^{rT}")
+        ax1.axvline(S_hedge, linestyle="--", color='gray', alpha=0.7)
+        ax1.set_xlabel("Underlying at maturity S_T")
+        ax1.set_ylabel("Payoff / Terminal value")
+        ax1.set_title("Option vs Static Replication")
+        ax1.grid(True)
+        ax1.legend()
+        st.pyplot(fig1)
+
+    with col2:
+        fig2, ax2 = plt.subplots(figsize=(6, 4))
+        ax2.plot(S_grid, err, color='red')
+        ax2.axhline(0.0, color='black', lw=1)
+        ax2.axvline(S_hedge, linestyle="--", color='gray', alpha=0.7)
+        ax2.set_xlabel("S_T")
+        ax2.set_ylabel("Error (Rep - Option)")
+        ax2.set_title("Replication error (Gamma effect)")
+        ax2.grid(True)
+        st.pyplot(fig2)
 
     st.markdown("---")
 

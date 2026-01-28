@@ -1,7 +1,29 @@
 import streamlit as st
 from pricer.products.swap import InterestRateSwap
 
+# --- FONCTION DE CALCUL CACHÉE ---
+@st.cache_data
+def compute_swap_cached(r, T, fixed_rate, notional, freq, is_payer):
+    """
+    Effectue les calculs du Swap.
+    """
+    swap = InterestRateSwap(
+        fixed_rate=fixed_rate,
+        maturity=T,
+        freq=freq,
+        notional=notional
+    )
 
+    par_rate = swap.par_rate(r)
+    value = swap.value(r, payer=is_payer)
+
+    return {
+        "par_rate": par_rate,
+        "value": value,
+        "is_payer": is_payer
+    }
+
+# --- FONCTION DE RENDU ---
 def render():
 
     st.header("Interest Rate Swap (Fixed vs Floating)")
@@ -16,23 +38,44 @@ def render():
     with col2:
         notional = st.number_input("Notional", value=1.0, key="swap_N")
         freq = st.selectbox("Payment frequency (per year)", [1, 2, 4], key="swap_freq")
-        payer = st.radio(
+        payer_selection = st.radio(
             "Position",
             ["Payer (pay fixed)", "Receiver (receive fixed)"],
             key="swap_pos"
         )
 
+    # BOUTON DE CALCUL
     if st.button("Price swap", key="swap_btn"):
 
-        swap = InterestRateSwap(
+        # Préparation du booléen pour la fonction cachée
+        is_payer = payer_selection.startswith("Payer")
+
+        # Calcul et Stockage
+        results = compute_swap_cached(
+            r=r,
+            T=T,
             fixed_rate=fixed_rate,
-            maturity=T,
+            notional=notional,
             freq=freq,
-            notional=notional
+            is_payer=is_payer
         )
+        st.session_state.swap_results = results
 
-        par_rate = swap.par_rate(r)
-        value = swap.value(r, payer=payer.startswith("Payer"))
+    # AFFICHAGE PERSISTANT
+    if 'swap_results' in st.session_state:
+        res = st.session_state.swap_results
 
-        st.success(f"Par swap rate: {par_rate:.6f}")
-        st.info(f"Swap present value: {value:.6f}")
+        st.divider()
+        st.success(f"Par swap rate: {res['par_rate']:.6f}")
+
+        # On peut ajouter une petite nuance visuelle selon si la valeur est positive ou négative
+        val = res['value']
+        lbl = "Swap Present Value"
+        if val >= 0:
+            st.info(f"{lbl}: {val:.6f}")
+        else:
+            st.error(f"{lbl}: {val:.6f}")
+
+        # Petit rappel contextuel
+        direction = "paying" if res['is_payer'] else "receiving"
+        st.caption(f"Value for the party {direction} fixed rate.")
