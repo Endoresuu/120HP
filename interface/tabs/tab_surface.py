@@ -13,18 +13,48 @@ from pricer.market.import_data import (
 
 from pricer.calibration.surface_calibrator import Calibrator
 
+
 def render():
     st.subheader("Volatility Surface (2D)")
+    st.caption("Market implied volatility surface calibrated across strikes and maturities")
 
-    ticker_sf = st.text_input("Ticker for surface", value="SPY", key="surf_ticker")
-    n_mat = st.slider("Number of maturities to use", 2, 20, 5, key="surf_mat")
+    st.divider()
 
-    interp_method = st.selectbox(
-        "Interpolation method",
-        ["Bilinear (2D interpolation)"],
-        key="surf_interp_method"
-    )
+    # =====================================================
+    # INPUTS
+    # =====================================================
+    col_inputs, col_outputs = st.columns([1.3, 1.7], gap="large")
 
+    with col_inputs:
+        st.subheader("Market inputs")
+
+        ticker_sf = st.text_input(
+            "Ticker for surface",
+            value="SPY",
+            key="surf_ticker"
+        )
+
+        n_mat = st.slider(
+            "Number of maturities to use",
+            2, 20, 5,
+            key="surf_mat"
+        )
+
+        interp_method = st.selectbox(
+            "Interpolation method",
+            ["Bilinear (2D interpolation)"],
+            key="surf_interp_method"
+        )
+
+        run = st.button(
+            "Compute Volatility Surface",
+            use_container_width=True,
+            key="surf_btn"
+        )
+
+    # =====================================================
+    # DATA & CALIBRATION (CACHED)
+    # =====================================================
     @st.cache_data(show_spinner=False)
     def get_calibrated_surface(ticker_sf, n_mat, r_val):
         chains = get_option_chain(ticker_sf)
@@ -82,59 +112,122 @@ def render():
 
         return df_raw, strikes, maturities, S0
 
-    # LOGIQUE DE BOUTON ET SESSION
-    # Si on clique sur le bouton, on force le recalcul en vidant la session spécifique
-    if st.button("Compute Volatility Surface", key="surf_btn"):
-        with st.status("Fetching data and computing surface...", expanded=True) as status:
-            data = get_calibrated_surface(ticker_sf, n_mat, 0.04)
-            st.session_state.surface_data = data
-            status.update(label="Calibration Complete!", state="complete", expanded=False)
+    # =====================================================
+    # OUTPUTS
+    # =====================================================
+    with col_outputs:
+        st.subheader("Results")
 
-    # AFFICHAGE (Uniquement si les données existent en session)
-    if 'surface_data' in st.session_state:
-        try:
-            # ETAPE CRUCIALE : On extrait les variables de la session à chaque exécution
-            df_raw, strikes, maturities, S0 = st.session_state.surface_data
+        if run:
+            with st.status(
+                "Fetching data and computing surface...",
+                expanded=True
+            ) as status:
+                try:
+                    data = get_calibrated_surface(ticker_sf, n_mat, 0.04)
+                    st.session_state.surface_data = data
+                    status.update(
+                        label="Calibration complete",
+                        state="complete",
+                        expanded=False
+                    )
+                except Exception as e:
+                    status.update(label="Error", state="error", expanded=False)
+                    st.error(f"Calibration error: {e}")
 
-            # --- Interpolation ---
-            if interp_method == "Bilinear (2D interpolation)":
-                df_interp = (df_raw.dropna(how="all", axis=0).dropna(how="all", 
-                axis=1).interpolate(axis=1, limit_direction="both").interpolate(axis=0, 
-                limit_direction="both"))
-            else:
-                df_interp = df_raw.copy()
+        # =====================================================
+        # DISPLAY (PERSISTANT)
+        # =====================================================
+        if "surface_data" in st.session_state:
+            try:
+                df_raw, strikes, maturities, S0 = st.session_state.surface_data
 
-            st.subheader("Results")
-            st.write(f"Spot Price S0: {S0:.2f}")
+                # --- Interpolation ---
+                if interp_method == "Bilinear (2D interpolation)":
+                    df_interp = (
+                        df_raw
+                        .dropna(how="all", axis=0)
+                        .dropna(how="all", axis=1)
+                        .interpolate(axis=1, limit_direction="both")
+                        .interpolate(axis=0, limit_direction="both")
+                    )
+                else:
+                    df_interp = df_raw.copy()
 
-            st.caption( "Surface built from market option prices via implied volatility inversion "
-            "and interpolated across strikes and maturities.")
+                st.markdown(f"**Spot price S₀**: {S0:.2f}")
 
-            # --- 3D Surface ---
-            K_grid, T_grid = np.meshgrid(df_interp.columns, df_interp.index)
-            fig = go.Figure(data=[go.Surface(z=df_interp.values, x=K_grid, y=T_grid, colorscale='Viridis')])
-            fig.update_layout(
-                scene=dict(xaxis_title='Strike', yaxis_title='Maturity', zaxis_title='Vol'),
-                margin=dict(l=0, r=0, b=0, t=40)
-            )
-            st.plotly_chart(fig, use_container_width=True)
+                st.caption(
+                    "Surface built from market option prices via implied volatility inversion "
+                    "and interpolated across strikes and maturities."
+                )
 
-            st.divider()
-            colA, colB = st.columns(2)
+                # =================================================
+                # 3D SURFACE
+                # =================================================
+                K_grid, T_grid = np.meshgrid(df_interp.columns, df_interp.index)
 
-            with colA:
-                chosen_T = st.selectbox("Maturity for skew", options=list(df_interp.index), format_func=lambda x: f"{x:.4f}")
-                fig_skew, ax_skew = plt.subplots()
-                ax_skew.plot(df_interp.columns, df_interp.loc[chosen_T], marker='o')
-                ax_skew.set_title(f"Skew (T={chosen_T:.4f})")
-                st.pyplot(fig_skew)
+                fig = go.Figure(
+                    data=[
+                        go.Surface(
+                            z=df_interp.values,
+                            x=K_grid,
+                            y=T_grid,
+                            colorscale="Viridis"
+                        )
+                    ]
+                )
+                fig.update_layout(
+                    scene=dict(
+                        xaxis_title="Strike",
+                        yaxis_title="Maturity",
+                        zaxis_title="Volatility"
+                    ),
+                    margin=dict(l=0, r=0, b=0, t=40)
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
-            with colB:
-                chosen_K = st.selectbox("Strike for term structure", options=list(df_interp.columns))
-                fig_term, ax_term = plt.subplots()
-                ax_term.plot(df_interp.index, df_interp[chosen_K], marker='o', color='orange')
-                ax_term.set_title(f"Term Structure (K={chosen_K:.2f})")
-                st.pyplot(fig_term)
+                st.divider()
 
-        except Exception as e:
-            st.error(f"Erreur d'affichage : {e}")
+                # =================================================
+                # SKEW & TERM STRUCTURE
+                # =================================================
+                colA, colB = st.columns(2)
+
+                with colA:
+                    chosen_T = st.selectbox(
+                        "Maturity for skew",
+                        options=list(df_interp.index),
+                        format_func=lambda x: f"{x:.4f}"
+                    )
+                    fig_skew, ax_skew = plt.subplots()
+                    ax_skew.plot(
+                        df_interp.columns,
+                        df_interp.loc[chosen_T],
+                        marker="o"
+                    )
+                    ax_skew.set_title(f"Skew (T={chosen_T:.4f})")
+                    ax_skew.set_xlabel("Strike")
+                    ax_skew.set_ylabel("Volatility")
+                    ax_skew.grid(True)
+                    st.pyplot(fig_skew)
+
+                with colB:
+                    chosen_K = st.selectbox(
+                        "Strike for term structure",
+                        options=list(df_interp.columns)
+                    )
+                    fig_term, ax_term = plt.subplots()
+                    ax_term.plot(
+                        df_interp.index,
+                        df_interp[chosen_K],
+                        marker="o",
+                        color="orange"
+                    )
+                    ax_term.set_title(f"Term Structure (K={chosen_K:.2f})")
+                    ax_term.set_xlabel("Maturity")
+                    ax_term.set_ylabel("Volatility")
+                    ax_term.grid(True)
+                    st.pyplot(fig_term)
+
+            except Exception as e:
+                st.error(f"Erreur d'affichage : {e}")

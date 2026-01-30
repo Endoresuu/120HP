@@ -9,8 +9,12 @@ from pricer.pricing.engine import PricingEngine
 from pricer.products.vanilla import EuropeanCall, EuropeanPut
 from pricer.models.bs_greeks import delta_call, delta_put
 
+
 def render():
-    st.header("Replication & Hedging playground (Black–Scholes)")
+    st.subheader("Replication & Hedging playground (Black–Scholes)")
+    st.caption("Static replication and discrete delta hedging under Black–Scholes")
+
+    st.divider()
 
     # ----------------------------
     # Imports locaux indispensables
@@ -18,115 +22,176 @@ def render():
     from pricer.models.bs_greeks import delta_call, delta_put  # IMPORTANT
 
     # ----------------------------
-    # Inputs
+    # INPUTS
     # ----------------------------
-    col1, col2 = st.columns(2)
+    col_inputs, col_outputs = st.columns([1.4, 1.6], gap="large")
 
-    with col1:
-        S0 = st.number_input("Spot S₀", value=100.0, min_value=1e-8, key="rep_S0")
-        K  = st.number_input("Strike K", value=100.0, min_value=1e-8, key="rep_K")
-        T  = st.number_input("Maturity T (years)", value=1.0, min_value=1e-6, key="rep_T")
-        opt_type = st.radio("Option", ["Call", "Put"], key="rep_type")
+    with col_inputs:
+        st.subheader("Contract & Market")
 
-    with col2:
-        r = st.number_input("Risk-free rate r", value=0.04, key="rep_r")
-        sigma = st.number_input("Volatility σ", value=0.20, min_value=1e-8, key="rep_sigma")
-        q = st.number_input("Dividend yield q", value=0.0, min_value=0.0, key="rep_q")
+        c1, c2 = st.columns(2)
+        with c1:
+            S0 = st.number_input("Spot S₀", value=100.0, min_value=1e-8, key="rep_S0")
+            K  = st.number_input("Strike K", value=100.0, min_value=1e-8, key="rep_K")
+            T  = st.number_input("Maturity T (years)", value=1.0, min_value=1e-6, key="rep_T")
+            opt_type = st.radio("Option", ["Call", "Put"], key="rep_type", horizontal=True)
 
-    st.markdown("---")
+        with c2:
+            r = st.number_input("Risk-free rate r", value=0.04, key="rep_r")
+            sigma = st.number_input("Volatility σ", value=0.20, min_value=1e-8, key="rep_sigma")
+            q = st.number_input("Dividend yield q", value=0.0, min_value=0.0, key="rep_q")
 
-    # ----------------------------
-    # Hedge spot
-    # ----------------------------
-    st.subheader("Static replication (one delta computed at a chosen spot)")
+        st.divider()
 
-    hedge_spot_mode = st.radio(
-        "Delta computed at:",
-        ["Current spot S₀", "Custom spot"],
-        key="rep_hedge_spot_mode"
-    )
+        # ----------------------------
+        # Hedge spot
+        # ----------------------------
+        st.subheader("Static replication (one delta computed at a chosen spot)")
 
-    if hedge_spot_mode == "Current spot S₀":
-        S_hedge = float(S0)
-        st.info(f"Delta will be computed at S = {S_hedge:.4f}")
-    else:
-        S_hedge = st.number_input("Custom hedge spot", value=float(S0), min_value=1e-8, key="rep_Shedge")
+        hedge_spot_mode = st.radio(
+            "Delta computed at:",
+            ["Current spot S₀", "Custom spot"],
+            key="rep_hedge_spot_mode"
+        )
+
+        if hedge_spot_mode == "Current spot S₀":
+            S_hedge = float(S0)
+            st.info(f"Delta will be computed at S = {S_hedge:.4f}")
+        else:
+            S_hedge = st.number_input(
+                "Custom hedge spot",
+                value=float(S0),
+                min_value=1e-8,
+                key="rep_Shedge"
+            )
+
+        # ----------------------------
+        # BOUTON — RÉPLICATION STATIQUE
+        # ----------------------------
+        if st.button("Compute static replication", key="rep_run_static"):
+            st.session_state.rep_static_done = True
 
     # ----------------------------
     # Build market & price option
     # ----------------------------
-    market = MarketData(spot=S0, r=r, q=q) if "q" in MarketData.__init__.__code__.co_varnames else MarketData(spot=S0, r=r)
-    option = EuropeanCall(K, T) if opt_type == "Call" else EuropeanPut(K, T)
+    market = (
+        MarketData(spot=S0, r=r, q=q)
+        if "q" in MarketData.__init__.__code__.co_varnames
+        else MarketData(spot=S0, r=r)
+    )
 
+    option = EuropeanCall(K, T) if opt_type == "Call" else EuropeanPut(K, T)
     model = BlackScholesModel(market_data=market, sigma=sigma)
     engine = PricingEngine(model=model)
 
-    price0 = float(engine.price_european(option, kind=opt_type.lower()))
+    if st.session_state.get("rep_static_done", False):
 
-    # Delta at hedge spot
-    if opt_type == "Call":
-        delta0 = float(delta_call(S_hedge, K, r, sigma, T))
-    else:
-        delta0 = float(delta_put(S_hedge, K, r, sigma, T))
+        price0 = float(engine.price_european(option, kind=opt_type.lower()))
 
-    # Replicating portfolio at t=0
-    B0 = price0 - delta0 * S_hedge
+        if opt_type == "Call":
+            delta0 = float(delta_call(S_hedge, K, r, sigma, T))
+        else:
+            delta0 = float(delta_put(S_hedge, K, r, sigma, T))
+
+        B0 = price0 - delta0 * S_hedge
+
+        st.session_state.rep_static_results = {
+            "price0": price0,
+            "delta0": delta0,
+            "B0": B0
+        }
 
     # ----------------------------
-    # Display key numbers
+    # OUTPUTS — STATIC REPLICATION
     # ----------------------------
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Option price (t=0)", f"{price0:.6f}")
-    c2.metric("Delta used (static)", f"{delta0:.6f}")
-    c3.metric("Cash position B₀", f"{B0:.6f}")
+    with col_outputs:
+        st.subheader("Static replication results")
 
-    st.caption(
-        "Static replication = one hedge with Δ at a chosen spot. "
-        "It won't match globally due to convexity (Gamma)."
-    )
+        if "rep_static_results" in st.session_state:
+            res = st.session_state.rep_static_results
+
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Option price (t=0)", f"{res['price0']:.6f}")
+            m2.metric("Delta used (static)", f"{res['delta0']:.6f}")
+            m3.metric("Cash position B₀", f"{res['B0']:.6f}")
+
+            st.caption(
+                "Static replication = one hedge with Δ at a chosen spot. "
+                "It won't match globally due to convexity (Gamma)."
+            )
+
+    st.divider()
 
     # ----------------------------
     # Payoff comparison
     # ----------------------------
     st.subheader("Payoff comparison at maturity")
 
-    s_min = st.number_input("Min S_T (plot)", value=0.5 * float(S0), min_value=1e-8, key="rep_smin")
-    s_max = st.number_input("Max S_T (plot)", value=1.5 * float(S0), min_value=1e-8, key="rep_smax")
-    n_pts = st.slider("Grid points", min_value=100, max_value=2000, value=400, key="rep_npts")
+    if st.button("Plot payoff comparison", key="rep_plot_payoff"):
+        st.session_state.rep_plot_payoff = True
 
-    S_grid = np.linspace(float(s_min), float(s_max), int(n_pts))
+    if st.session_state.get("rep_plot_payoff", False) and "rep_static_results" in st.session_state:
 
-    payoff_opt = np.maximum(S_grid - K, 0.0) if opt_type == "Call" else np.maximum(K - S_grid, 0.0)
-    payoff_rep = delta0 * S_grid + B0 * np.exp(r * T)
-    err = payoff_rep - payoff_opt
+        res = st.session_state.rep_static_results
+        price0 = res["price0"]
+        delta0 = res["delta0"]
+        B0 = res["B0"]
 
-    col1, col2 = st.columns(2)
+        s1, s2, s3 = st.columns(3)
+        s_min = s1.number_input(
+            "Min S_T (plot)",
+            value=0.5 * float(S0),
+            min_value=1e-8,
+            key="rep_smin"
+        )
+        s_max = s2.number_input(
+            "Max S_T (plot)",
+            value=1.5 * float(S0),
+            min_value=1e-8,
+            key="rep_smax"
+        )
+        n_pts = s3.slider(
+            "Grid points",
+            min_value=100,
+            max_value=2000,
+            value=400,
+            key="rep_npts"
+        )
 
-    with col1:
-        # On peut réduire un peu le figsize pour que ça rentre bien
-        fig1, ax1 = plt.subplots(figsize=(6, 4))
-        ax1.plot(S_grid, payoff_opt, label="Option payoff")
-        ax1.plot(S_grid, payoff_rep, label="Static replication: Δ·S_T + B·e^{rT}")
-        ax1.axvline(S_hedge, linestyle="--", color='gray', alpha=0.7)
-        ax1.set_xlabel("Underlying at maturity S_T")
-        ax1.set_ylabel("Payoff / Terminal value")
-        ax1.set_title("Option vs Static Replication")
-        ax1.grid(True)
-        ax1.legend()
-        st.pyplot(fig1)
+        S_grid = np.linspace(float(s_min), float(s_max), int(n_pts))
+        payoff_opt = (
+            np.maximum(S_grid - K, 0.0)
+            if opt_type == "Call"
+            else np.maximum(K - S_grid, 0.0)
+        )
+        payoff_rep = delta0 * S_grid + B0 * np.exp(r * T)
+        err = payoff_rep - payoff_opt
 
-    with col2:
-        fig2, ax2 = plt.subplots(figsize=(6, 4))
-        ax2.plot(S_grid, err, color='red')
-        ax2.axhline(0.0, color='black', lw=1)
-        ax2.axvline(S_hedge, linestyle="--", color='gray', alpha=0.7)
-        ax2.set_xlabel("S_T")
-        ax2.set_ylabel("Error (Rep - Option)")
-        ax2.set_title("Replication error (Gamma effect)")
-        ax2.grid(True)
-        st.pyplot(fig2)
+        c1, c2 = st.columns(2)
+        with c1:
+            fig1, ax1 = plt.subplots(figsize=(6, 4))
+            ax1.plot(S_grid, payoff_opt, label="Option payoff")
+            ax1.plot(S_grid, payoff_rep, label="Static replication: Δ·S_T + B·e^{rT}")
+            ax1.axvline(S_hedge, linestyle="--", color="gray", alpha=0.7)
+            ax1.set_xlabel("Underlying at maturity S_T")
+            ax1.set_ylabel("Payoff / Terminal value")
+            ax1.set_title("Option vs Static Replication")
+            ax1.grid(True)
+            ax1.legend()
+            st.pyplot(fig1)
 
-    st.markdown("---")
+        with c2:
+            fig2, ax2 = plt.subplots(figsize=(6, 4))
+            ax2.plot(S_grid, err, color="red")
+            ax2.axhline(0.0, color="black", lw=1)
+            ax2.axvline(S_hedge, linestyle="--", color="gray", alpha=0.7)
+            ax2.set_xlabel("S_T")
+            ax2.set_ylabel("Error (Rep - Option)")
+            ax2.set_title("Replication error (Gamma effect)")
+            ax2.grid(True)
+            st.pyplot(fig2)
+
+    st.divider()
 
     # ==========================================================
     # Discrete delta-hedging simulation (BS)
@@ -137,23 +202,44 @@ def render():
 
         colh1, colh2 = st.columns(2)
         with colh1:
-            n_steps = st.number_input("Re-hedge steps (N)", value=50, min_value=1, max_value=2000, key="rep_N")
-            n_paths = st.number_input("Simulation paths", value=2000, min_value=200, max_value=50000, key="rep_paths")
+            n_steps = st.number_input(
+                "Re-hedge steps (N)",
+                value=50,
+                min_value=1,
+                max_value=2000,
+                key="rep_N"
+            )
+            n_paths = st.number_input(
+                "Simulation paths",
+                value=2000,
+                min_value=200,
+                max_value=50000,
+                key="rep_paths"
+            )
+
         with colh2:
-            seed = st.number_input("Random seed", value=123, min_value=0, max_value=10_000_000, key="rep_seed")
-            use_same_delta_spot = st.checkbox("Initial hedge at S₀ (ignore custom hedge spot here)", value=True, key="rep_useS0")
+            seed = st.number_input(
+                "Random seed",
+                value=123,
+                min_value=0,
+                max_value=10_000_000,
+                key="rep_seed"
+            )
+            use_same_delta_spot = st.checkbox(
+                "Initial hedge at S₀ (ignore custom hedge spot here)",
+                value=True,
+                key="rep_useS0"
+            )
 
         if st.button("Run hedging simulation", key="rep_run_hedge"):
-
             try:
                 np.random.seed(int(seed))
 
                 N = int(n_steps)
                 M = int(n_paths)
                 dt = float(T) / N
-                disc_step = np.exp(r * dt)  # perf: precompute
+                disc_step = np.exp(r * dt)
 
-                # Risk-neutral drift uses (r - q)
                 drift = (r - q - 0.5 * sigma**2) * dt
                 vol_dt = sigma * np.sqrt(dt)
 
@@ -162,10 +248,9 @@ def render():
                 S[:, 0] = float(S0)
 
                 for t in range(N):
-                    S[:, t+1] = S[:, t] * np.exp(drift + vol_dt * Z[:, t])
+                    S[:, t + 1] = S[:, t] * np.exp(drift + vol_dt * Z[:, t])
 
                 price_init = float(price0)
-
                 S_init_delta = float(S0) if use_same_delta_spot else float(S_hedge)
 
                 if opt_type == "Call":
@@ -178,9 +263,8 @@ def render():
 
                 for t in range(N):
                     cash *= disc_step
-
-                    tau = max(float(T) - (t+1) * dt, 1e-12)
-                    S_t = S[:, t+1]
+                    tau = max(float(T) - (t + 1) * dt, 1e-12)
+                    S_t = S[:, t + 1]
 
                     if opt_type == "Call":
                         new_delta = np.array(delta_call(S_t, K, r, sigma, tau), dtype=float)
@@ -192,16 +276,20 @@ def render():
                     delta_pos = new_delta
 
                 V_T = delta_pos * S[:, -1] + cash
-                payoff_T = np.maximum(S[:, -1] - K, 0.0) if opt_type == "Call" else np.maximum(K - S[:, -1], 0.0)
+                payoff_T = (
+                    np.maximum(S[:, -1] - K, 0.0)
+                    if opt_type == "Call"
+                    else np.maximum(K - S[:, -1], 0.0)
+                )
 
                 hedge_error = V_T - payoff_T
 
                 st.success("Simulation done")
 
-                cA, cB, cC = st.columns(3)
-                cA.metric("Mean hedging error", f"{hedge_error.mean():.6f}")
-                cB.metric("Std hedging error", f"{hedge_error.std(ddof=1):.6f}")
-                cC.metric("95% quantile |error|", f"{np.quantile(np.abs(hedge_error), 0.95):.6f}")
+                mA, mB, mC = st.columns(3)
+                mA.metric("Mean hedging error", f"{hedge_error.mean():.6f}")
+                mB.metric("Std hedging error", f"{hedge_error.std(ddof=1):.6f}")
+                mC.metric("95% quantile |error|", f"{np.quantile(np.abs(hedge_error), 0.95):.6f}")
 
                 fig3, ax3 = plt.subplots(figsize=(7, 3.8))
                 ax3.hist(hedge_error, bins=50)

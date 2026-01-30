@@ -1,24 +1,19 @@
-import streamlit as st
-import os
-import sys
-
 import os
 import sys
 import streamlit as st
 
 # ======================================================
-# 1) PYTHON PATH — AVANT TOUT LE RESTE
+# 1) PYTHON PATH
 # ======================================================
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 # ======================================================
-# 2) PAGE CONFIG — UNE SEULE FOIS, AU DÉBUT
+# 2) PAGE CONFIG
 # ======================================================
 st.set_page_config(
     page_title="Option Pricer",
-    page_icon="💰",
     layout="wide"
 )
 
@@ -35,23 +30,21 @@ from tabs.tab_replication import render as render_replication
 from tabs.tab_swaps import render as render_swaps
 
 # ======================================================
-# 4) TITRE GLOBAL
+# 4) HEADER PRINCIPAL
 # ======================================================
-st.markdown(
-    "<h1 style='text-align:center;'>Option Pricer 💰</h1>",
-    unsafe_allow_html=True
-)
+st.title("Option Pricer")
+st.caption("Pricing, volatility structures and hedging analysis")
 
 # ======================================================
 # 5) TABS
 # ======================================================
 tabs = st.tabs([
-    "Pricer",
-    "Smile",
-    "Surface",
-    "Heston",
+    "Pricing",
+    "Volatility Smile",
+    "Volatility Surface",
+    "Heston Model",
     "Greeks",
-    "Linear",
+    "Linear Products",
     "Replication",
     "Swaps"
 ])
