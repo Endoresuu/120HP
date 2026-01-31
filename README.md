@@ -50,24 +50,66 @@ This project is designed as an educational and practical playground for:
 ---
 
 ## Project Structure
+## Project Structure
 
 ```text
 120HP/
+├── .vscode/
+│   └── settings.json
+│
 ├── interface/
-│   ├── streamlit_app.py
+│   ├── .streamlit/
+│   │   └── config.toml
+│   │
 │   ├── tabs/
-│   │   ├── tab_pricing.py
-│   │   ├── tab_greeks.py
-│   │   ├── tab_replication.py
-│   └── utils/
+│   │   ├── tab_pricing.py          # Vanilla option pricing (Black–Scholes)
+│   │   ├── tab_smile.py            # Volatility smile calibration
+│   │   ├── tab_surface.py          # Volatility surface construction
+│   │   ├── tab_heston.py           # Heston stochastic volatility model
+│   │   ├── tab_greeks.py           # Greeks analysis (Delta, Gamma, Vega, etc.)
+│   │   ├── tab_linear.py           # Linear products (forwards, futures)
+│   │   ├── tab_replication.py      # Static replication & delta hedging
+│   │   └── tab_swaps.py            # Interest rate swaps
+│   │
+│   ├── utils/
+│   │   └── helpers.py              # UI / formatting helpers
+│   │
+│   ├── streamlit_app.py            # Main Streamlit entry point
+│   └── streamlit_app1.py           # Alternative / dev entry point
+│
 ├── pricer/
-│   ├── models/
-│   ├── products/
+│   ├── calibration/
+│   │   ├── market_calibrator.py    # Smile & surface calibration logic
+│   │   └── surface_calibrator.py
+│   │
 │   ├── market/
-│   └── pricing/
-├── requirements.txt
-└── README.md
+│   │   ├── data.py                 # Market data abstraction
+│   │   └── helper.py               # Option chain & expiry helpers
+│   │
+│   ├── models/
+│   │   ├── black_scholes.py        # Black–Scholes model
+│   │   ├── heston.py               # Heston model
+│   │   └── bs_greeks.py            # Closed-form Greeks
+│   │
+│   ├── pricing/
+│   │   └── engine.py               # Pricing engine
+│   │
+│   ├── products/
+│   │   ├── vanilla.py              # European call & put
+│   │   ├── forward.py              # Forward contracts
+│   │   ├── future.py               # Futures
+│   │   └── swap.py                 # Interest rate swaps
+│   │
+│   └── __init__.py
+│
+├── examples/
+│   └── notebooks.ipynb             # Optional experimentation
+│
+├── requirements.txt                # Python dependencies
+├── README.md                       # Project documentation
+└── picture.png                     # Illustrations / screenshots
 ```
+
 
 ---
 
