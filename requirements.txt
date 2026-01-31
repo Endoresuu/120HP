@@ -1,0 +1,17 @@
+# App & UI
+streamlit>=1.32
+
+# Numerical stack
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+
+# Plotting
+matplotlib>=3.7
+plotly>=5.18
+
+# Market data
+yfinance>=0.2.33
+
+# Dates & utils
+python-dateutil>=2.8

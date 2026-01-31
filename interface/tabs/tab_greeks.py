@@ -158,27 +158,44 @@ def render():
     # =====================================================
     st.markdown("### 3) Gamma heatmap Γ(S, K)")
 
-    h1, h2 = st.columns(2)
-    s_min = h1.slider("Min S factor", 0.5, 1.0, 0.7, key="g_smin")
-    s_max = h2.slider("Max S factor", 1.0, 1.5, 1.3, key="g_smax")
+    # --- Layout: left = controls, right = plot
+    col_controls, col_plot = st.columns([1, 2], gap="large")
 
-    if st.button("Plot Gamma Heatmap", key="g_heatmap"):
+    with col_controls:
+        s_min = st.slider(
+            "Min S factor",
+            0.5, 1.0, 0.7,
+            key="g_smin"
+        )
+
+        s_max = st.slider(
+            "Max S factor",
+            1.0, 1.5, 1.3,
+            key="g_smax"
+        )
+
+        plot_gamma = st.button("Plot Gamma Heatmap")
+
+    if plot_gamma:
         st.session_state.gamma_heatmap = compute_gamma_heatmap(
             S, K, T, r, sigma, s_min, s_max
         )
 
-    if "gamma_heatmap" in st.session_state:
-        S_vals, K_vals, G = st.session_state.gamma_heatmap
+    with col_plot:
+        if "gamma_heatmap" in st.session_state:
+            S_vals, K_vals, G = st.session_state.gamma_heatmap
 
-        fig, ax = plt.subplots(figsize=(7, 5))
-        im = ax.imshow(
-            G,
-            origin="lower",
-            aspect="auto",
-            extent=[K_vals[0], K_vals[-1], S_vals[0], S_vals[-1]]
-        )
-        ax.set_xlabel("Strike K")
-        ax.set_ylabel("Spot S")
-        ax.set_title("Gamma heatmap Γ(S, K)")
-        fig.colorbar(im, ax=ax)
-        st.pyplot(fig)
+            fig, ax = plt.subplots(figsize=(4.5, 4))
+            im = ax.imshow(
+                G,
+                origin="lower",
+                aspect="auto",
+                extent=[K_vals[0], K_vals[-1], S_vals[0], S_vals[-1]]
+            )
+
+            ax.set_xlabel("Strike K")
+            ax.set_ylabel("Spot S")
+            ax.set_title("Gamma heatmap Γ(S, K)")
+
+            fig.colorbar(im, ax=ax, shrink=0.7)
+            st.pyplot(fig, use_container_width=False)

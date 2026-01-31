@@ -9,7 +9,6 @@ from pricer.pricing.engine import PricingEngine
 from pricer.products.vanilla import EuropeanCall, EuropeanPut
 from pricer.models.bs_greeks import delta_call, delta_put
 
-
 def render():
     st.subheader("Replication & Hedging playground (Black–Scholes)")
     st.caption("Static replication and discrete delta hedging under Black–Scholes")
@@ -98,8 +97,15 @@ def render():
         st.session_state.rep_static_results = {
             "price0": price0,
             "delta0": delta0,
-            "B0": B0
+            "B0": B0,
+            "S_hedge": float(S_hedge),
+            "S0": float(S0),
+            "K": float(K),
+            "T": float(T),
+            "r": float(r),
+            "opt_type": opt_type
         }
+
 
     # ----------------------------
     # OUTPUTS — STATIC REPLICATION
@@ -127,26 +133,32 @@ def render():
     # ----------------------------
     st.subheader("Payoff comparison at maturity")
 
-    if st.button("Plot payoff comparison", key="rep_plot_payoff"):
+    if st.button("Plot payoff comparison"):
         st.session_state.rep_plot_payoff = True
 
     if st.session_state.get("rep_plot_payoff", False) and "rep_static_results" in st.session_state:
 
         res = st.session_state.rep_static_results
-        price0 = res["price0"]
         delta0 = res["delta0"]
         B0 = res["B0"]
+
+        S_hedge_used = res["S_hedge"]
+        K_used = res["K"]
+        T_used = res["T"]
+        r_used = res["r"]
+        opt_type_used = res["opt_type"]
+        S0_used = res["S0"]
 
         s1, s2, s3 = st.columns(3)
         s_min = s1.number_input(
             "Min S_T (plot)",
-            value=0.5 * float(S0),
+            value=0.5 * S0_used,
             min_value=1e-8,
             key="rep_smin"
         )
         s_max = s2.number_input(
             "Max S_T (plot)",
-            value=1.5 * float(S0),
+            value=1.5 * S0_used,
             min_value=1e-8,
             key="rep_smax"
         )
@@ -158,13 +170,15 @@ def render():
             key="rep_npts"
         )
 
-        S_grid = np.linspace(float(s_min), float(s_max), int(n_pts))
+        S_grid = np.linspace(s_min, s_max, int(n_pts))
+
         payoff_opt = (
-            np.maximum(S_grid - K, 0.0)
-            if opt_type == "Call"
-            else np.maximum(K - S_grid, 0.0)
+            np.maximum(S_grid - K_used, 0.0)
+            if opt_type_used == "Call"
+            else np.maximum(K_used - S_grid, 0.0)
         )
-        payoff_rep = delta0 * S_grid + B0 * np.exp(r * T)
+
+        payoff_rep = delta0 * S_grid + B0 * np.exp(r_used * T_used)
         err = payoff_rep - payoff_opt
 
         c1, c2 = st.columns(2)
@@ -172,7 +186,7 @@ def render():
             fig1, ax1 = plt.subplots(figsize=(6, 4))
             ax1.plot(S_grid, payoff_opt, label="Option payoff")
             ax1.plot(S_grid, payoff_rep, label="Static replication: Δ·S_T + B·e^{rT}")
-            ax1.axvline(S_hedge, linestyle="--", color="gray", alpha=0.7)
+            ax1.axvline(S_hedge_used, linestyle="--", color="gray", alpha=0.7)
             ax1.set_xlabel("Underlying at maturity S_T")
             ax1.set_ylabel("Payoff / Terminal value")
             ax1.set_title("Option vs Static Replication")
@@ -184,7 +198,7 @@ def render():
             fig2, ax2 = plt.subplots(figsize=(6, 4))
             ax2.plot(S_grid, err, color="red")
             ax2.axhline(0.0, color="black", lw=1)
-            ax2.axvline(S_hedge, linestyle="--", color="gray", alpha=0.7)
+            ax2.axvline(S_hedge_used, linestyle="--", color="gray", alpha=0.7)
             ax2.set_xlabel("S_T")
             ax2.set_ylabel("Error (Rep - Option)")
             ax2.set_title("Replication error (Gamma effect)")
@@ -250,7 +264,11 @@ def render():
                 for t in range(N):
                     S[:, t + 1] = S[:, t] * np.exp(drift + vol_dt * Z[:, t])
 
-                price_init = float(price0)
+                if "rep_static_results" not in st.session_state:
+                    st.error("Compute static replication first.")
+                    return
+                    
+                price_init = float(st.session_state.rep_static_results["price0"])
                 S_init_delta = float(S0) if use_same_delta_spot else float(S_hedge)
 
                 if opt_type == "Call":
