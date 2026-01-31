@@ -4,7 +4,18 @@ import pandas as pd
 
 def choose_next_expiry(chains):
     """
-    Retourne (expiry_str, days, T) pour la prochaine échéance future.
+    Return the next available future option expiry.
+
+    Parameters
+    ----------
+    chains : dict
+        Dictionary of option chains indexed by expiry date (YYYY-MM-DD).
+
+    Returns
+    -------
+    tuple
+        (expiry_str, days_to_expiry, maturity_in_years)
+        Returns (None, None, None) if no future expiry is found.
     """
     if not chains:
         return None, None, None
@@ -37,7 +48,20 @@ def choose_next_expiry(chains):
 
 def choose_expiry_closest_to_T(chains, T_target):
     """
-    Retourne (expiry_str, days, T) pour l'échéance la plus proche de T_target.
+    Return the option expiry whose maturity is closest to a target maturity T.
+
+    Parameters
+    ----------
+    chains : dict
+        Dictionary of option chains indexed by expiry date (YYYY-MM-DD).
+    T_target : float
+        Target maturity in years.
+
+    Returns
+    -------
+    tuple
+        (expiry_str, days_to_expiry, maturity_in_years)
+        Returns (None, None, None) if no suitable expiry is found.
     """
     if not chains or T_target is None or T_target <= 0:
         return None, None, None
@@ -75,8 +99,26 @@ def choose_expiry_closest_to_T(chains, T_target):
 
 def get_market_call_price_from_chain(chains, expiry, K):
     """
-    Récupère un prix de CALL depuis une option chain Yahoo Finance
-    en prenant le strike le plus proche de K.
+    Retrieve a CALL option market price from a Yahoo Finance option chain,
+    using the strike closest to a target strike K.
+
+    The function prioritizes the last traded price when available.
+    If unavailable, it falls back to the mid-price (bid-ask average).
+
+    Parameters
+    ----------
+    chains : dict
+        Dictionary of option chains indexed by expiry date.
+    expiry : str
+        Option expiry date (YYYY-MM-DD).
+    K : float
+        Target strike.
+
+    Returns
+    -------
+    tuple
+        (price, strike_used)
+        Returns (None, None) if no valid option price is found.
     """
     if chains is None or expiry not in chains:
         return None, None

@@ -92,7 +92,7 @@ def render():
     st.divider()
 
     # =====================================================
-    # 1) Greeks at a given point
+    # 1) Greeks 
     # =====================================================
     st.markdown("### 1) Greeks at a given point")
 

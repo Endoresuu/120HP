@@ -3,15 +3,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-
 from datetime import datetime
-
+from pricer.calibration.surface_calibrator import Calibrator
 from pricer.market.import_data import (
     get_option_chain,
     get_close_price
 )
-
-from pricer.calibration.surface_calibrator import Calibrator
 
 
 def render():
@@ -136,7 +133,7 @@ def render():
                     st.error(f"Calibration error: {e}")
 
         # =====================================================
-        # DISPLAY (PERSISTANT)
+        # DISPLAY 
         # =====================================================
         if "surface_data" in st.session_state:
             try:

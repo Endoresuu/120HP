@@ -108,7 +108,7 @@ def render():
                 is_payer=is_payer
             )
 
-        # AFFICHAGE PERSISTANT
+        # AFFICHAGE 
         if "swap_results" in st.session_state:
             res = st.session_state.swap_results
 
