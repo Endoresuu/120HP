@@ -50,7 +50,6 @@ This project is designed as an educational and practical playground for:
 ---
 
 ## Project Structure
-## Project Structure
 
 ```text
 120HP/
@@ -74,8 +73,7 @@ This project is designed as an educational and practical playground for:
 │   ├── utils/
 │   │   └── helpers.py              # UI / formatting helpers
 │   │
-│   ├── streamlit_app.py            # Main Streamlit entry point
-│   └── streamlit_app1.py           # Alternative / dev entry point
+│   └──streamlit_app.py            # Main Streamlit entry point
 │
 ├── pricer/
 │   ├── calibration/
@@ -102,12 +100,8 @@ This project is designed as an educational and practical playground for:
 │   │
 │   └── __init__.py
 │
-├── examples/
-│   └── notebooks.ipynb             # Optional experimentation
-│
 ├── requirements.txt                # Python dependencies
-├── README.md                       # Project documentation
-└── picture.png                     # Illustrations / screenshots
+└── README.md                       # Project documentation
 ```
 
 
