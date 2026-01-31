@@ -51,8 +51,23 @@ This project is designed as an educational and practical playground for:
 
 ## Project Structure
 
----
-
+```text
+120HP/
+├── interface/
+│   ├── streamlit_app.py
+│   ├── tabs/
+│   │   ├── tab_pricing.py
+│   │   ├── tab_greeks.py
+│   │   ├── tab_replication.py
+│   └── utils/
+├── pricer/
+│   ├── models/
+│   ├── products/
+│   ├── market/
+│   └── pricing/
+├── requirements.txt
+└── README.md
+```
 
 ---
 
